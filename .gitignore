@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+coverage/
+dist/
+
+.env
+.env.*
+!.env.example
+
+logs/
+AGENTS.md

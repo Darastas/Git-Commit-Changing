@@ -1,0 +1,66 @@
+[
+  {
+    "sha": "bbbb2222",
+    "commit": {
+      "message": "Add renderer and parser",
+      "author": {
+        "name": "Avery",
+        "date": "2024-03-02T10:00:00Z"
+      }
+    },
+    "author": {
+      "login": "avery",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4"
+    },
+    "files": [
+      {
+        "filename": "src/render/city.ts",
+        "status": "added",
+        "additions": 120,
+        "deletions": 0,
+        "changes": 120
+      },
+      {
+        "filename": "src/parser.ts",
+        "status": "modified",
+        "additions": 35,
+        "deletions": 8,
+        "changes": 43
+      },
+      {
+        "filename": "README.md",
+        "status": "modified",
+        "additions": 12,
+        "deletions": 2,
+        "changes": 14
+      }
+    ]
+  },
+  {
+    "sha": "aaaa1111",
+    "commit": {
+      "message": "Bootstrap project",
+      "author": {
+        "name": "Rin",
+        "date": "2024-03-01T09:00:00Z"
+      }
+    },
+    "author": null,
+    "files": [
+      {
+        "filename": "src/parser.ts",
+        "status": "added",
+        "additions": 80,
+        "deletions": 0,
+        "changes": 80
+      },
+      {
+        "filename": "package.json",
+        "status": "added",
+        "additions": 30,
+        "deletions": 0,
+        "changes": 30
+      }
+    ]
+  }
+]
