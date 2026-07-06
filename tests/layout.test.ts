@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GitHubCommitDetail, GitHubRepoMetadata } from "@/lib/github/github-types";
 import { buildRepoMovieFromGitHub } from "@/lib/movie/repo-parser";
-import { buildCommitTrend, interpolateTrendPoint, nearestTrendPoint } from "@/lib/movie/trend";
+import { advanceTrendProgress, buildCommitTrend, interpolateTrendPoint, nearestTrendPoint } from "@/lib/movie/trend";
 import commitDetails from "./fixtures/github-commit-details.json";
 
 const repo: GitHubRepoMetadata = {
@@ -61,5 +61,40 @@ describe("buildCommitTrend", () => {
 
     expect(nearestTrendPoint(trend, 0.1)?.commitSha).toBe("aaaa1111");
     expect(nearestTrendPoint(trend, 0.9)?.commitSha).toBe("bbbb2222");
+  });
+
+  it("maps the repository star total onto the commit timeline", () => {
+    const movie = buildRepoMovieFromGitHub({
+      repo,
+      commitLimit: 30,
+      commits: commitDetails as GitHubCommitDetail[]
+    });
+
+    const trend = buildCommitTrend(movie);
+
+    expect(trend[0].cumulativeStars).toBeGreaterThan(0);
+    expect(trend[0].cumulativeStars).toBeLessThanOrEqual(21);
+    expect(trend[1].cumulativeStars).toBeGreaterThanOrEqual(trend[0].cumulativeStars);
+    expect(trend.at(-1)?.cumulativeStars).toBe(movie.repo.stars);
+  });
+
+  it("advances playback progress continuously without frame-boundary jumps", () => {
+    const beforeBoundary = advanceTrendProgress({
+      currentProgress: 0.249,
+      deltaMs: 16,
+      speed: 1,
+      playing: true,
+      durationMs: 4800
+    });
+    const afterBoundary = advanceTrendProgress({
+      currentProgress: beforeBoundary,
+      deltaMs: 16,
+      speed: 1,
+      playing: true,
+      durationMs: 4800
+    });
+
+    expect(afterBoundary).toBeGreaterThan(beforeBoundary);
+    expect(afterBoundary - beforeBoundary).toBeLessThan(0.01);
   });
 });

@@ -18,7 +18,8 @@ Repo Movie Machine is a compact creative developer tool that turns a public GitH
   - x-axis dates with commits
   - y-axis cumulative commit count
   - continuously moving curve reveal
-  - in-canvas author, date, SHA, file count, and delta HUD
+  - estimated star trend mapped from the repository's current GitHub star total
+  - in-canvas author, date, stars, SHA, file count, and delta HUD
   - language colors and file inspection context
   - play, pause, scrub, speed, jump start/end
   - commit panel and file inspector
@@ -142,6 +143,7 @@ Boundaries are intentionally separate: GitHub access, validation, job management
 - Without `GITHUB_TOKEN`, generated movies use commit-list summaries and synthetic `.repo/activity/*` files rather than exact changed files.
 - With `GITHUB_TOKEN`, commit details are fetched sequentially to stay simple and gentle on GitHub rate limits.
 - The analyzer uses recent GitHub API commits only; it does not clone full repository history.
+- Star history is currently estimated from the repository's current star count and commit timeline. Exact historical starring events require an additional GitHub stargazers timeline fetch.
 - Very large repositories should use the 30-commit setting first.
 - MP4 export is not included. WebM is browser-side only.
 

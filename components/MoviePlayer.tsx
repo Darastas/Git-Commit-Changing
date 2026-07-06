@@ -3,6 +3,7 @@
 import { Download, FileJson, Pause, Play, Share2, SkipBack, SkipForward, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RepoMovie } from "@/lib/movie/repo-movie-types";
+import { advanceTrendProgress } from "@/lib/movie/trend";
 import { CodeCityCanvas } from "./CodeCityCanvas";
 import { CommitPanel } from "./CommitPanel";
 import { FileInspector } from "./FileInspector";
@@ -23,7 +24,7 @@ function downloadBlob(filename: string, blob: Blob) {
 }
 
 export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
-  const [frameIndex, setFrameIndex] = useState(0);
+  const [playheadProgress, setPlayheadProgress] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [recording, setRecording] = useState(false);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
@@ -33,8 +34,10 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const frameMax = Math.max(0, movie.frames.length - 1);
+  const frameIndex = frameMax === 0 ? 0 : Math.min(frameMax, Math.round(playheadProgress * frameMax));
   const commit = movie.commits[Math.min(frameIndex, movie.commits.length - 1)] ?? movie.commits[0];
   const selectedFile = selectedPath ? movie.files[selectedPath] : undefined;
+  const playbackDurationMs = Math.max(2400, Math.max(1, movie.commits.length) * 1200);
   const shareUrl = useMemo(() => {
     if (typeof window === "undefined" || !jobId) {
       return undefined;
@@ -42,15 +45,40 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
     return `${window.location.origin}/movie/${jobId}`;
   }, [jobId]);
 
+  function progressForFrame(index: number) {
+    return frameMax === 0 ? 0 : Math.min(1, Math.max(0, index / frameMax));
+  }
+
+  function setProgressForFrame(index: number) {
+    setPlayheadProgress(progressForFrame(index));
+  }
+
   useEffect(() => {
     if (!playing || frameMax === 0) {
       return;
     }
-    const interval = window.setInterval(() => {
-      setFrameIndex((current) => (current >= frameMax ? 0 : current + 1));
-    }, 1200 / speed);
-    return () => window.clearInterval(interval);
-  }, [frameMax, playing, speed]);
+
+    let animationFrame = 0;
+    let lastTimestamp: number | undefined;
+
+    function tick(timestamp: number) {
+      const deltaMs = lastTimestamp === undefined ? 0 : timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+      setPlayheadProgress((currentProgress) =>
+        advanceTrendProgress({
+          currentProgress,
+          deltaMs,
+          speed,
+          playing,
+          durationMs: playbackDurationMs
+        })
+      );
+      animationFrame = window.requestAnimationFrame(tick);
+    }
+
+    animationFrame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [frameMax, playbackDurationMs, playing, speed]);
 
   function toggleRecording() {
     if (recording) {
@@ -105,6 +133,11 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
                 <span className="rounded-[0.3rem] border border-stone-700/80 bg-[#090b0a]/80 px-2 py-1">
                   {movie.repo.defaultBranch}
                 </span>
+                {typeof movie.repo.stars === "number" ? (
+                  <span className="rounded-[0.3rem] border border-stone-700/80 bg-[#090b0a]/80 px-2 py-1">
+                    {movie.repo.stars} stars
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -113,7 +146,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               aria-label="Jump to start"
               title="Jump to start"
               className="flex h-9 w-9 items-center justify-center rounded-[0.35rem] border border-stone-700 bg-[#090b0a] text-stone-200 hover:border-amber-300"
-              onClick={() => setFrameIndex(0)}
+              onClick={() => setProgressForFrame(0)}
             >
               <SkipBack className="h-4 w-4" />
             </button>
@@ -131,7 +164,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               aria-label="Jump to end"
               title="Jump to end"
               className="flex h-9 w-9 items-center justify-center rounded-[0.35rem] border border-stone-700 bg-[#090b0a] text-stone-200 hover:border-amber-300"
-              onClick={() => setFrameIndex(frameMax)}
+              onClick={() => setProgressForFrame(frameMax)}
             >
               <SkipForward className="h-4 w-4" />
             </button>
@@ -165,13 +198,13 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
         <CodeCityCanvas
           ref={canvasRef}
           movie={movie}
-          frameIndex={frameIndex}
+          playheadProgress={playheadProgress}
           selectedPath={selectedPath}
           onSelectFile={setSelectedPath}
         />
 
         <div className="rounded-[0.45rem] border border-stone-800/80 bg-[#10120f]/78 p-3">
-          <Timeline frameIndex={frameIndex} max={frameMax} onChange={setFrameIndex} />
+          <Timeline frameIndex={frameIndex} max={frameMax} onChange={setProgressForFrame} />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400">
             <span>
               {movie.stats.totalCommits} commits · {movie.stats.activeFiles} active files · {movie.stats.totalChanges} changes
@@ -245,7 +278,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               commits={movie.commits}
               currentIndex={frameIndex}
               onSelectCommit={(index) => {
-                setFrameIndex(index);
+                setProgressForFrame(index);
                 setPlaying(false);
               }}
             />

@@ -12,7 +12,7 @@ import type { MovieFile, RepoMovie } from "@/lib/movie/repo-movie-types";
 
 type CodeCityCanvasProps = {
   movie: RepoMovie;
-  frameIndex: number;
+  playheadProgress: number;
   selectedPath?: string;
   onSelectFile: (path: string) => void;
 };
@@ -52,16 +52,19 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function easeInOutCubic(value: number) {
-  return value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
-}
-
 function formatAxisDate(date: string) {
   const value = new Date(date);
   if (Number.isNaN(value.getTime())) {
     return date.slice(0, 10);
   }
   return value.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatStars(value: number) {
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+  }
+  return String(Math.max(0, Math.round(value)));
 }
 
 function formatHudDate(date: string) {
@@ -205,6 +208,15 @@ function buildChartPoints(points: CommitTrendPoint[], chart: Rect): ChartPoint[]
   }));
 }
 
+function buildStarChartPoints(points: CommitTrendPoint[], chart: Rect): ChartPoint[] {
+  const maxStars = Math.max(1, ...points.map((point) => point.cumulativeStars));
+  return points.map((point, index) => ({
+    x: pointX(point, points, chart, index),
+    y: pointY(point.cumulativeStars, maxStars, chart),
+    source: point
+  }));
+}
+
 function curveControls(from: { x: number; y: number }, to: { x: number; y: number }) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -279,6 +291,22 @@ function visualCursorPoint(coordinates: ChartPoint[], interpolated: Interpolated
   return cubicPoint(from, c1, c2, to, interpolated.segmentProgress);
 }
 
+function drawCanvasStar(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) {
+  ctx.beginPath();
+  for (let index = 0; index < 10; index += 1) {
+    const angle = -Math.PI / 2 + index * (Math.PI / 5);
+    const nextRadius = index % 2 === 0 ? radius : radius * 0.42;
+    const nextX = x + Math.cos(angle) * nextRadius;
+    const nextY = y + Math.sin(angle) * nextRadius;
+    if (index === 0) {
+      ctx.moveTo(nextX, nextY);
+    } else {
+      ctx.lineTo(nextX, nextY);
+    }
+  }
+  ctx.closePath();
+}
+
 function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: number, tempo: number) {
   const background = ctx.createLinearGradient(0, 0, width, height);
   background.addColorStop(0, "#070909");
@@ -317,6 +345,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
 function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: CommitTrendPoint[]) {
   const { chart, small } = layout;
   const maxCommits = Math.max(1, points.length);
+  const maxStars = Math.max(0, ...points.map((point) => point.cumulativeStars));
 
   ctx.save();
   ctx.fillStyle = "rgba(7, 9, 9, 0.34)";
@@ -377,6 +406,17 @@ function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: Co
   ctx.font = `${small ? 9 : 10}px ui-monospace, monospace`;
   ctx.fillStyle = "rgba(214, 211, 209, 0.58)";
   ctx.fillText("dates with commits", chart.x + (small ? 118 : 152), chart.y - 18);
+  if (maxStars > 0) {
+    const legendX = chart.x + chart.width - (small ? 96 : 132);
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.82)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(legendX, chart.y - 21);
+    ctx.lineTo(legendX + 20, chart.y - 21);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(186, 230, 253, 0.82)";
+    ctx.fillText(small ? "stars" : `estimated stars ${formatStars(maxStars)}`, legendX + 26, chart.y - 18);
+  }
   ctx.restore();
 }
 
@@ -491,6 +531,75 @@ function drawTrendCurve(
   return interpolated;
 }
 
+function drawStarTrendCurve(
+  ctx: CanvasRenderingContext2D,
+  layout: ChartLayout,
+  points: CommitTrendPoint[],
+  progress: number,
+  tempo: number
+) {
+  const totalStars = Math.max(0, ...points.map((point) => point.cumulativeStars));
+  if (totalStars <= 0) {
+    return;
+  }
+
+  const { chart } = layout;
+  const coordinates = buildStarChartPoints(points, chart);
+  const interpolated = interpolateTrendPoint(points, progress);
+  if (!interpolated) {
+    return;
+  }
+
+  const cursor = visualCursorPoint(coordinates, interpolated);
+  const revealed = coordinates.slice(0, interpolated.segmentIndex + 1);
+  const last = revealed[revealed.length - 1];
+  if (!last || Math.abs(last.x - cursor.x) > 0.01 || Math.abs(last.y - cursor.y) > 0.01) {
+    revealed.push({ x: cursor.x, y: cursor.y, source: interpolated.right });
+  }
+
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.strokeStyle = "rgba(125, 211, 252, 0.18)";
+  ctx.lineWidth = 1.3;
+  drawSmoothPath(ctx, coordinates);
+  ctx.stroke();
+
+  const stroke = ctx.createLinearGradient(chart.x, 0, chart.x + chart.width, 0);
+  stroke.addColorStop(0, "rgba(20, 184, 166, 0.34)");
+  stroke.addColorStop(0.5, "rgba(56, 189, 248, 0.82)");
+  stroke.addColorStop(1, "rgba(186, 230, 253, 0.74)");
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2.2;
+  ctx.shadowColor = "#38bdf8";
+  ctx.shadowBlur = 12 + Math.sin(tempo * 2.1) * 3;
+  drawSmoothPath(ctx, revealed);
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  coordinates.forEach((point, index) => {
+    const reached = index <= interpolated.segmentIndex || point.x <= cursor.x;
+    ctx.fillStyle = reached ? "rgba(186, 230, 253, 0.86)" : "rgba(125, 211, 252, 0.24)";
+    drawCanvasStar(ctx, point.x, point.y, reached ? 4.2 : 3.2);
+    ctx.fill();
+  });
+
+  const halo = ctx.createRadialGradient(cursor.x, cursor.y, 2, cursor.x, cursor.y, 24);
+  halo.addColorStop(0, "rgba(186, 230, 253, 0.76)");
+  halo.addColorStop(0.42, "rgba(56, 189, 248, 0.24)");
+  halo.addColorStop(1, "rgba(56, 189, 248, 0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cursor.x, cursor.y, 24, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(240, 249, 255, 0.96)";
+  drawCanvasStar(ctx, cursor.x, cursor.y, 6.2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawHudMetric(
   ctx: CanvasRenderingContext2D,
   label: string,
@@ -595,8 +704,18 @@ function drawHud(
   drawHudMetric(ctx, "Files", String(point.changedFiles.length), x + metricWidth + columnGap, y, metricWidth);
   y += small ? 44 : 50;
   drawHudMetric(ctx, "Delta", `+${point.additions} / -${point.deletions}`, x, y, metricWidth);
-  drawHudMetric(ctx, "SHA", point.shortSha, x + metricWidth + columnGap, y, metricWidth);
+  drawHudMetric(ctx, "Stars", formatStars(point.cumulativeStars), x + metricWidth + columnGap, y, metricWidth);
   y += small ? 48 : 56;
+
+  if (y < hud.y + hud.height - 76) {
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.fillStyle = "rgba(168, 162, 158, 0.76)";
+    ctx.fillText("SHA", x, y - 6);
+    ctx.font = `700 ${small ? 10 : 11}px ui-monospace, monospace`;
+    ctx.fillStyle = "rgba(214, 211, 209, 0.86)";
+    drawFitText(ctx, point.shortSha, x + 28, y - 6, contentWidth - 28);
+    y += small ? 18 : 20;
+  }
 
   if (selectedFile && y < hud.y + hud.height - 34) {
     ctx.fillStyle = "rgba(20, 184, 166, 0.1)";
@@ -627,7 +746,7 @@ function drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: nu
 }
 
 export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>(function CodeCityCanvas(
-  { movie, frameIndex, selectedPath, onSelectFile },
+  { movie, playheadProgress, selectedPath, onSelectFile },
   forwardedRef
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -676,13 +795,12 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
       }
 
       const layout = calculateLayout(width, height);
-      const baseIndex = clamp(frameIndex, 0, Math.max(0, trend.length - 1));
-      const sweep = baseIndex >= trend.length - 1 ? 1 : easeInOutCubic((now % 1400) / 1400);
-      const progress = trend.length <= 1 ? 1 : clamp((baseIndex + sweep) / (trend.length - 1), 0, 1);
+      const progress = trend.length <= 1 ? 1 : clamp(playheadProgress, 0, 1);
       const activePoint = nearestTrendPoint(trend, progress) ?? trend[0];
 
       drawBackground(ctx, width, height, tempo);
       drawAxes(ctx, layout, trend);
+      drawStarTrendCurve(ctx, layout, trend, progress, tempo);
       drawTrendCurve(ctx, layout, trend, progress, tempo);
       drawHud(ctx, layout, movie, activePoint, selectedFile, progress, tempo);
 
@@ -697,7 +815,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
 
     draw(performance.now());
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [frameIndex, movie, selectedFile, trend]);
+  }, [movie, playheadProgress, selectedFile, trend]);
 
   return (
     <canvas

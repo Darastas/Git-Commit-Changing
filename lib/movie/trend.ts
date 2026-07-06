@@ -10,6 +10,7 @@ export type CommitTrendPoint = {
   date: string;
   timestamp: number;
   cumulativeCommits: number;
+  cumulativeStars: number;
   additions: number;
   deletions: number;
   changedFiles: MovieCommit["changedFiles"];
@@ -23,6 +24,15 @@ export type InterpolatedTrendPoint = {
   right: CommitTrendPoint;
   timestamp: number;
   cumulativeCommits: number;
+  cumulativeStars: number;
+};
+
+export type ContinuousProgressInput = {
+  currentProgress: number;
+  deltaMs: number;
+  speed: number;
+  playing: boolean;
+  durationMs: number;
 };
 
 function toTimestamp(date: string, fallback: number) {
@@ -39,14 +49,17 @@ function lerp(from: number, to: number, progress: number) {
 }
 
 export function buildCommitTrend(movie: RepoMovie): CommitTrendPoint[] {
-  return movie.commits
+  const totalStars = Math.max(0, movie.repo.stars ?? 0);
+  const ordered = movie.commits
     .map((commit, originalIndex) => ({
       commit,
       originalIndex,
       timestamp: toTimestamp(commit.date, originalIndex)
     }))
-    .sort((a, b) => a.timestamp - b.timestamp || a.originalIndex - b.originalIndex)
-    .map(({ commit, timestamp }, index) => ({
+    .sort((a, b) => a.timestamp - b.timestamp || a.originalIndex - b.originalIndex);
+  const pointCount = Math.max(1, ordered.length);
+
+  return ordered.map(({ commit, timestamp }, index) => ({
       commitSha: commit.sha,
       shortSha: commit.shortSha,
       message: commit.message,
@@ -56,6 +69,8 @@ export function buildCommitTrend(movie: RepoMovie): CommitTrendPoint[] {
       date: commit.date,
       timestamp,
       cumulativeCommits: index + 1,
+      cumulativeStars:
+        index === pointCount - 1 ? totalStars : Math.round(totalStars * Math.pow((index + 1) / pointCount, 1.22)),
       additions: commit.additions,
       deletions: commit.deletions,
       changedFiles: commit.changedFiles
@@ -75,7 +90,8 @@ export function interpolateTrendPoint(points: CommitTrendPoint[], progress: numb
       left: points[0],
       right: points[0],
       timestamp: points[0].timestamp,
-      cumulativeCommits: points[0].cumulativeCommits
+      cumulativeCommits: points[0].cumulativeCommits,
+      cumulativeStars: points[0].cumulativeStars
     };
   }
 
@@ -93,8 +109,31 @@ export function interpolateTrendPoint(points: CommitTrendPoint[], progress: numb
     left,
     right,
     timestamp: lerp(left.timestamp, right.timestamp, segmentProgress),
-    cumulativeCommits: lerp(left.cumulativeCommits, right.cumulativeCommits, segmentProgress)
+    cumulativeCommits: lerp(left.cumulativeCommits, right.cumulativeCommits, segmentProgress),
+    cumulativeStars: lerp(left.cumulativeStars, right.cumulativeStars, segmentProgress)
   };
+}
+
+export function advanceTrendProgress({
+  currentProgress,
+  deltaMs,
+  speed,
+  playing,
+  durationMs
+}: ContinuousProgressInput): number {
+  const normalized = clamp(currentProgress, 0, 1);
+  if (!playing) {
+    return normalized;
+  }
+
+  const safeDuration = Math.max(1, durationMs);
+  const delta = Math.max(0, deltaMs) * Math.max(0, speed) / safeDuration;
+  if (delta === 0) {
+    return normalized;
+  }
+
+  const next = normalized + delta;
+  return next >= 1 ? next % 1 : next;
 }
 
 export function nearestTrendPoint(points: CommitTrendPoint[], progress: number): CommitTrendPoint | undefined {
