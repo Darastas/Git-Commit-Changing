@@ -17,6 +17,7 @@ export type MovieCommit = {
   shortSha: string;
   message: string;
   authorName: string;
+  authorLogin?: string;
   authorAvatar?: string;
   date: string;
   changedFiles: MovieCommitFile[];

@@ -118,6 +118,7 @@ function toMovieCommit(commit: GitHubCommitDetail, primaryLanguage?: string): Mo
     shortSha: commit.sha.slice(0, 7),
     message: commit.commit.message.split("\n")[0] || "(no commit message)",
     authorName: commit.commit.author?.name ?? commit.author?.login ?? "Unknown author",
+    authorLogin: commit.author?.login,
     authorAvatar: commit.author?.avatar_url,
     date: commitDate(commit),
     changedFiles,

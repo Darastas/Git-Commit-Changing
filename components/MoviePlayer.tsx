@@ -88,7 +88,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
     shareStatus === "copied" ? "Share link copied" : shareStatus === "failed" ? "Could not copy share link" : "Copy share link";
 
   return (
-    <div className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_19rem]">
+    <div className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="grid min-h-0 gap-3">
         <div className="rounded-[0.45rem] border border-stone-700/80 bg-[#10120f]/86 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -239,8 +239,17 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
           </div>
         </div>
       </section>
-      <aside className="grid content-start gap-3">
-        {commit ? <CommitPanel commit={commit} index={frameIndex} total={movie.commits.length} /> : null}
+      <aside className="grid content-start gap-3 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+        {commit ? (
+          <CommitPanel
+            commits={movie.commits}
+            currentIndex={frameIndex}
+            onSelectCommit={(index) => {
+              setFrameIndex(index);
+              setPlaying(false);
+            }}
+          />
+        ) : null}
         <FileInspector file={selectedFile} />
       </aside>
     </div>

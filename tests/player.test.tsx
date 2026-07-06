@@ -36,7 +36,16 @@ describe("MoviePlayer", () => {
     expect(screen.getByText("JSON")).toBeTruthy();
     expect(screen.getByText("PNG")).toBeTruthy();
     expect(screen.getByText("WebM")).toBeTruthy();
-    expect(screen.getByText("Bootstrap interface shell")).toBeTruthy();
+    expect(screen.getAllByText("Bootstrap interface shell").length).toBeGreaterThan(0);
+  });
+
+  it("uses the right rail for author identity and commit annotations", () => {
+    render(<MoviePlayer movie={sampleMovie} />);
+
+    expect(screen.getByText("Commit trail")).toBeTruthy();
+    expect(screen.getByText("@mina")).toBeTruthy();
+    expect(screen.getByText("Render code city timeline")).toBeTruthy();
+    expect(screen.getByText("2024/1/2")).toBeTruthy();
   });
 
   it("confirms when the share URL has been copied", async () => {
