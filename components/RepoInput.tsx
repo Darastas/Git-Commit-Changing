@@ -30,7 +30,7 @@ export function RepoInput({ onSubmit, isLoading = false, initialRepo = "" }: Rep
           <input
             id="repo-url"
             className="h-11 w-full rounded-[0.4rem] border border-stone-700/90 bg-[#090b0a]/90 pl-9 pr-3 text-sm text-stone-100 outline-none transition placeholder:text-stone-600 focus:border-amber-300 focus:ring-2 focus:ring-amber-300/20"
-            placeholder="owner/repo or github.com/owner/repo"
+            placeholder="owner/repo"
             value={repo}
             onChange={(event) => setRepo(event.target.value)}
             disabled={isLoading}

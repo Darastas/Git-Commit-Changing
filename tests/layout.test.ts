@@ -36,4 +36,20 @@ describe("buildCodeCityLayout", () => {
       layout.buildings.find((building) => building.path === "README.md")?.height ?? 0
     );
   });
+
+  it("assigns varied skyline shapes and constellation anchors", () => {
+    const movie = buildRepoMovieFromGitHub({
+      repo,
+      commitLimit: 30,
+      commits: commitDetails as GitHubCommitDetail[]
+    });
+
+    const layout = buildCodeCityLayout(movie, 1000, 600);
+    const visualStyles = new Set(layout.buildings.map((building) => building.visualStyle));
+
+    expect(visualStyles.size).toBeGreaterThan(1);
+    expect(layout.buildings.every((building) => building.starX >= building.x)).toBe(true);
+    expect(layout.buildings.every((building) => building.starX <= building.x + building.width)).toBe(true);
+    expect(layout.buildings.every((building) => building.starY <= building.y + building.height)).toBe(true);
+  });
 });

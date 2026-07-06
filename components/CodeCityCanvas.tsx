@@ -66,6 +66,24 @@ function drawPolygon(ctx: CanvasRenderingContext2D, points: Array<[number, numbe
   ctx.closePath();
 }
 
+function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  for (let point = 1; point < 8; point += 1) {
+    const angle = (point * Math.PI) / 4;
+    const nextRadius = point % 2 === 0 ? radius : radius * 0.36;
+    ctx.lineTo(x + Math.cos(angle) * nextRadius, y + Math.sin(angle) * nextRadius);
+  }
+  ctx.closePath();
+}
+
+function drawSignalRing(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number, alpha: number) {
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(250, 204, 21, ${alpha})`;
+  ctx.stroke();
+}
+
 export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>(function CodeCityCanvas(
   { movie, frameIndex, selectedPath, onSelectFile },
   forwardedRef
@@ -74,6 +92,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
   useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement);
   const frame = movie.frames[Math.min(frameIndex, movie.frames.length - 1)] ?? movie.frames[0];
   const currentCommit = movie.commits[Math.min(frameIndex, movie.commits.length - 1)];
+  const currentChangedFiles = useMemo(() => currentCommit?.changedFiles ?? [], [currentCommit]);
   const currentEvents = useMemo(
     () => new Map(movie.events.filter((event) => event.commitSha === currentCommit?.sha).map((event) => [event.filePath, event])),
     [currentCommit?.sha, movie.events]
@@ -196,6 +215,66 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
       }
 
       const buildings = [...layout.buildings].sort((a, b) => a.y + a.height - (b.y + b.height));
+      const buildingByPath = new Map(layout.buildings.map((building) => [building.path, building]));
+      const activeBuildings = layout.buildings.filter((building) => frame.files[building.path]);
+      const recentBuildings = currentChangedFiles
+        .map((file) => buildingByPath.get(file.path))
+        .filter((building): building is (typeof layout.buildings)[number] => Boolean(building));
+
+      ctx.save();
+      for (const building of activeBuildings) {
+        const frameFile = frame.files[building.path];
+        const isRecent = Boolean(frameFile?.recentChange);
+        const alpha = isRecent ? 0.8 : 0.24 + building.activityScore * 0.26;
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = isRecent ? "#facc15" : building.color;
+        ctx.shadowBlur = isRecent ? 18 : 8 + building.activityScore * 10;
+        ctx.fillStyle = isRecent ? "#fff7d6" : rgba(building.color, 0.82);
+        drawStar(ctx, building.starX, building.starY, isRecent ? building.starRadius + 1.5 : building.starRadius);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      if (recentBuildings.length > 1) {
+        ctx.save();
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.shadowColor = "#facc15";
+        ctx.shadowBlur = 18 + frame.intensity * 18;
+        const orderedRecentBuildings = [...recentBuildings].sort((a, b) => a.starX - b.starX || a.starY - b.starY);
+        for (let index = 0; index < orderedRecentBuildings.length - 1; index += 1) {
+          const from = orderedRecentBuildings[index];
+          const to = orderedRecentBuildings[index + 1];
+          const pulse = (Math.sin(tempo * 3.2 + index) + 1) / 2;
+          const controlX = (from.starX + to.starX) / 2;
+          const controlY = Math.min(from.starY, to.starY) - 34 - frame.intensity * 28 - pulse * 14;
+          const gradient = ctx.createLinearGradient(from.starX, from.starY, to.starX, to.starY);
+          gradient.addColorStop(0, rgba(from.color, 0.18));
+          gradient.addColorStop(0.5, `rgba(250, 204, 21, ${0.52 + frame.intensity * 0.28})`);
+          gradient.addColorStop(1, rgba(to.color, 0.18));
+          ctx.strokeStyle = gradient;
+          ctx.lineWidth = 1.4 + frame.intensity * 2.2;
+          ctx.beginPath();
+          ctx.moveTo(from.starX, from.starY);
+          ctx.quadraticCurveTo(controlX, controlY, to.starX, to.starY);
+          ctx.stroke();
+
+          const cometT = (tempo * 0.42 + index * 0.23) % 1;
+          const oneMinusT = 1 - cometT;
+          const cometX = oneMinusT * oneMinusT * from.starX + 2 * oneMinusT * cometT * controlX + cometT * cometT * to.starX;
+          const cometY = oneMinusT * oneMinusT * from.starY + 2 * oneMinusT * cometT * controlY + cometT * cometT * to.starY;
+          ctx.fillStyle = "rgba(255, 247, 214, 0.92)";
+          ctx.beginPath();
+          ctx.arc(cometX, cometY, 2.8 + frame.intensity * 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        const hub = orderedRecentBuildings[Math.floor(orderedRecentBuildings.length / 2)];
+        ctx.lineWidth = 1.1;
+        drawSignalRing(ctx, hub.starX, hub.starY, 18 + Math.sin(tempo * 2.7) * 4 + frame.intensity * 16, 0.3);
+        drawSignalRing(ctx, hub.starX, hub.starY, 32 + Math.cos(tempo * 2.1) * 5 + frame.intensity * 24, 0.16);
+        ctx.restore();
+      }
 
       for (const building of buildings) {
         const frameFile = frame.files[building.path];
@@ -232,41 +311,125 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
           ctx.shadowBlur = isSelected ? 28 : 16 + building.activityScore * 24;
         }
 
-        drawPolygon(ctx, [
-          [baseX + width2d, topY],
-          [baseX + width2d + depth, topY - skew],
-          [baseX + width2d + depth, baseY - skew],
-          [baseX + width2d, baseY]
-        ]);
-        ctx.fillStyle = shade(building.color, 0.48);
-        ctx.fill();
+        if (building.visualStyle === "node") {
+          ctx.shadowColor = isSelected ? "#facc15" : building.color;
+          ctx.shadowBlur = isSelected ? 30 : 14 + building.activityScore * 22;
+          ctx.strokeStyle = rgba(building.color, 0.52);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(baseX + width2d / 2, baseY);
+          ctx.lineTo(building.starX, building.starY + building.starRadius * 1.3);
+          ctx.stroke();
+          ctx.fillStyle = rgba(building.color, 0.18);
+          ctx.beginPath();
+          ctx.ellipse(baseX + width2d / 2, baseY + 2, width2d * 0.72, 5, -0.18, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = isSelected ? "#fef3c7" : shade(building.color, 1.34);
+          drawStar(ctx, building.starX, building.starY, building.starRadius + (isRecent ? 2 : 0));
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = rgba(building.color, 0.38);
+          drawSignalRing(ctx, building.starX, building.starY, building.starRadius * (2.8 + Math.sin(tempo * 2.3) * 0.35), 0.22);
+        } else if (building.visualStyle === "stack") {
+          const levels = Math.max(3, Math.min(7, Math.round(3 + building.sizeScore * 4)));
+          const levelHeight = towerHeight / levels;
+          for (let level = 0; level < levels; level += 1) {
+            const y = baseY - (level + 1) * levelHeight;
+            const insetLevel = level * width2d * 0.035;
+            const levelWidth = width2d - insetLevel * 2;
+            ctx.fillStyle = shade(building.color, 0.58 + level * 0.055);
+            ctx.beginPath();
+            ctx.roundRect(baseX + insetLevel, y + 2, levelWidth, Math.max(5, levelHeight - 2), 4);
+            ctx.fill();
+            ctx.strokeStyle = rgba(building.color, isSelected ? 0.68 : 0.28);
+            ctx.stroke();
+          }
+          drawPolygon(ctx, [
+            [baseX + width2d * 0.12, topY],
+            [baseX + depth, topY - skew],
+            [baseX + width2d + depth * 0.6, topY - skew * 0.8],
+            [baseX + width2d * 0.9, topY]
+          ]);
+          ctx.fillStyle = shade(building.color, isSelected ? 1.42 : 1.16);
+          ctx.fill();
+        } else if (building.visualStyle === "spire") {
+          const center = baseX + width2d / 2;
+          drawPolygon(ctx, [
+            [baseX, baseY],
+            [center - width2d * 0.18, topY + towerHeight * 0.2],
+            [center, topY - skew * 1.2],
+            [center + width2d * 0.2, topY + towerHeight * 0.2],
+            [baseX + width2d, baseY]
+          ]);
+          ctx.fillStyle = shade(building.color, 0.7);
+          ctx.fill();
+          ctx.strokeStyle = rgba(building.color, isSelected ? 0.82 : 0.42);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(center, topY - skew * 1.2);
+          ctx.lineTo(center, topY - skew * 1.2 - 18 - building.activityScore * 18);
+          ctx.stroke();
+          ctx.fillStyle = "rgba(250, 204, 21, 0.86)";
+          drawStar(ctx, center, topY - skew * 1.2 - 20 - building.activityScore * 18, 3.6);
+          ctx.fill();
+        } else if (building.visualStyle === "relay") {
+          const center = baseX + width2d / 2;
+          ctx.strokeStyle = shade(building.color, 1.16);
+          ctx.lineWidth = Math.max(3, width2d * 0.18);
+          ctx.beginPath();
+          ctx.moveTo(center, baseY);
+          ctx.lineTo(center, topY - skew * 1.4);
+          ctx.stroke();
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = rgba(building.color, 0.58);
+          for (let ring = 0; ring < 4; ring += 1) {
+            const ringY = baseY - towerHeight * (0.18 + ring * 0.19);
+            ctx.beginPath();
+            ctx.ellipse(center, ringY, width2d * (0.62 + ring * 0.06), 5, -0.18, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.fillStyle = isSelected ? "#fef3c7" : shade(building.color, 1.34);
+          drawStar(ctx, building.starX, building.starY, building.starRadius + (isRecent ? 2 : 0));
+          ctx.fill();
+        } else {
+          drawPolygon(ctx, [
+            [baseX + width2d, topY],
+            [baseX + width2d + depth, topY - skew],
+            [baseX + width2d + depth, baseY - skew],
+            [baseX + width2d, baseY]
+          ]);
+          ctx.fillStyle = shade(building.color, 0.48);
+          ctx.fill();
 
-        ctx.beginPath();
-        ctx.roundRect(baseX, topY, width2d, towerHeight, Math.min(5, width2d / 4));
-        ctx.fillStyle = shade(building.color, 0.74);
-        ctx.fill();
+          ctx.beginPath();
+          ctx.roundRect(baseX, topY, width2d, towerHeight, Math.min(5, width2d / 4));
+          ctx.fillStyle = shade(building.color, 0.74);
+          ctx.fill();
 
-        drawPolygon(ctx, [
-          [baseX, topY],
-          [baseX + depth, topY - skew],
-          [baseX + width2d + depth, topY - skew],
-          [baseX + width2d, topY]
-        ]);
-        ctx.fillStyle = shade(building.color, isSelected ? 1.55 : 1.22);
-        ctx.fill();
-        ctx.strokeStyle = rgba(building.color, isSelected ? 0.9 : 0.38);
-        ctx.stroke();
+          drawPolygon(ctx, [
+            [baseX, topY],
+            [baseX + depth, topY - skew],
+            [baseX + width2d + depth, topY - skew],
+            [baseX + width2d, topY]
+          ]);
+          ctx.fillStyle = shade(building.color, isSelected ? 1.55 : 1.22);
+          ctx.fill();
+          ctx.strokeStyle = rgba(building.color, isSelected ? 0.9 : 0.38);
+          ctx.stroke();
+        }
 
         ctx.shadowBlur = 0;
-        const windowRows = Math.max(2, Math.min(12, Math.floor(towerHeight / 12)));
-        const windowCols = Math.max(1, Math.min(4, Math.floor(width2d / 8)));
-        const windowAlpha = isRecent ? 0.48 + Math.abs(Math.sin(tempo * 4)) * 0.22 : 0.18 + building.activityScore * 0.24;
-        ctx.fillStyle = isSelected ? "rgba(255, 251, 235, 0.72)" : `rgba(255, 251, 235, ${windowAlpha})`;
-        for (let row = 0; row < windowRows; row += 1) {
-          for (let col = 0; col < windowCols; col += 1) {
-            const wx = baseX + 4 + col * ((width2d - 8) / windowCols);
-            const wy = topY + 8 + row * ((towerHeight - 14) / windowRows);
-            ctx.fillRect(wx, wy, Math.max(2, (width2d - 10) / windowCols - 3), 2);
+        if (building.visualStyle !== "node") {
+          const windowRows = Math.max(2, Math.min(12, Math.floor(towerHeight / 12)));
+          const windowCols = Math.max(1, Math.min(4, Math.floor(width2d / 8)));
+          const windowAlpha = isRecent ? 0.48 + Math.abs(Math.sin(tempo * 4)) * 0.22 : 0.18 + building.activityScore * 0.24;
+          ctx.fillStyle = isSelected ? "rgba(255, 251, 235, 0.72)" : `rgba(255, 251, 235, ${windowAlpha})`;
+          for (let row = 0; row < windowRows; row += 1) {
+            for (let col = 0; col < windowCols; col += 1) {
+              const wx = baseX + 4 + col * ((width2d - 8) / windowCols);
+              const wy = topY + 8 + row * ((towerHeight - 14) / windowRows);
+              ctx.fillRect(wx, wy, Math.max(2, (width2d - 10) / windowCols - 3), 2);
+            }
           }
         }
 
@@ -304,7 +467,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
 
     draw(performance.now());
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [canvasRef, currentEvents, frame, movie, selectedPath]);
+  }, [canvasRef, currentChangedFiles, currentEvents, frame, movie, selectedPath]);
 
   return (
     <canvas

@@ -16,12 +16,14 @@ beforeAll(() => {
     closePath: () => undefined,
     roundRect: () => undefined,
     arc: () => undefined,
+    ellipse: () => undefined,
     fill: () => undefined,
     stroke: () => undefined,
     fillText: () => undefined,
     save: () => undefined,
     restore: () => undefined,
     moveTo: () => undefined,
+    quadraticCurveTo: () => undefined,
     lineTo: () => undefined
   })) as unknown) as typeof HTMLCanvasElement.prototype.getContext;
 });

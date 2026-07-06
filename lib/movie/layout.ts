@@ -16,10 +16,14 @@ export type CityBuildingLayout = {
   directory: string;
   language: string;
   color: string;
+  visualStyle: "prism" | "stack" | "spire" | "relay" | "node";
   x: number;
   y: number;
   width: number;
   height: number;
+  starX: number;
+  starY: number;
+  starRadius: number;
   activityScore: number;
   sizeScore: number;
   status: MovieFile["status"];
@@ -54,6 +58,27 @@ function groupFiles(files: MovieFile[]) {
     }
     return a.localeCompare(b);
   });
+}
+
+function stableHash(value: string) {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return hash;
+}
+
+function visualStyleForFile(file: MovieFile): CityBuildingLayout["visualStyle"] {
+  if (file.activityScore > 0.86) {
+    return "relay";
+  }
+
+  if (file.sizeScore < 0.25) {
+    return "node";
+  }
+
+  const styles: Array<CityBuildingLayout["visualStyle"]> = ["prism", "stack", "spire"];
+  return styles[stableHash(file.path) % styles.length];
 }
 
 export function buildCodeCityLayout(movie: RepoMovie, width: number, height: number): CodeCityLayout {
@@ -107,6 +132,15 @@ export function buildCodeCityLayout(movie: RepoMovie, width: number, height: num
       );
       const centerX = x + innerPadding + fileColumn * cellWidth + cellWidth / 2;
       const baseY = y + labelSpace + innerPadding + (fileRow + 1) * cellHeight - 4;
+      const hash = stableHash(file.path);
+      const starOffsetX = (hash % 17) / 16 - 0.5;
+      const starOffsetY = ((hash >> 5) % 19) / 18;
+      const visualStyle = visualStyleForFile(file);
+      const starX = centerX + starOffsetX * footprint * 0.38;
+      const starY = Math.max(
+        y + labelSpace + 12,
+        baseY - towerHeight * (visualStyle === "node" ? 0.52 : 0.86) - starOffsetY * 12
+      );
 
       buildings.push({
         path: file.path,
@@ -114,10 +148,14 @@ export function buildCodeCityLayout(movie: RepoMovie, width: number, height: num
         directory,
         language: file.language,
         color: file.color,
+        visualStyle,
         x: centerX - footprint / 2,
         y: baseY - towerHeight,
         width: footprint,
         height: towerHeight,
+        starX,
+        starY,
+        starRadius: Math.max(2.6, Math.min(7.5, 2.4 + file.activityScore * 3.2 + file.sizeScore * 2.1)),
         activityScore: file.activityScore,
         sizeScore: file.sizeScore,
         status: file.status
