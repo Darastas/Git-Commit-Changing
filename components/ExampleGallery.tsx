@@ -11,12 +11,12 @@ type ExampleGalleryProps = {
 
 export function ExampleGallery({ onSelect, disabled = false }: ExampleGalleryProps) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="grid gap-2">
       {examples.map((repo) => (
         <button
           key={repo}
           type="button"
-          className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-700 bg-stone-900/80 px-2.5 text-xs font-medium text-stone-300 transition hover:border-teal-300 hover:text-teal-100 disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-2 rounded-[0.35rem] border border-stone-700/70 bg-[#090b0a]/70 px-2.5 text-xs font-medium text-stone-300 transition hover:border-teal-300 hover:bg-teal-300/10 hover:text-teal-100 disabled:opacity-50"
           onClick={() => onSelect(repo)}
           disabled={disabled}
         >

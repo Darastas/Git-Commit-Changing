@@ -22,7 +22,7 @@ type JobStatusProps = {
 export function JobStatus({ job, error }: JobStatusProps) {
   if (!job && !error) {
     return (
-      <div className="rounded-md border border-stone-800 bg-stone-950/45 p-3 text-sm text-stone-400">
+      <div className="rounded-[0.45rem] border border-stone-800/80 bg-[#0d0f0c]/70 p-3 text-sm text-stone-400">
         Load a repository or play the sample movie.
       </div>
     );
@@ -30,7 +30,7 @@ export function JobStatus({ job, error }: JobStatusProps) {
 
   if (error || job?.status === "failed") {
     return (
-      <div className="rounded-md border border-red-400/30 bg-red-950/25 p-3 text-sm text-red-100">
+      <div className="rounded-[0.45rem] border border-red-400/30 bg-red-950/25 p-3 text-sm text-red-100">
         <div className="flex items-center gap-2 font-semibold">
           <AlertTriangle className="h-4 w-4" />
           Could not generate movie
@@ -42,7 +42,7 @@ export function JobStatus({ job, error }: JobStatusProps) {
 
   const done = job?.status === "succeeded";
   return (
-    <div className="rounded-md border border-stone-800 bg-stone-950/45 p-3">
+    <div className="rounded-[0.45rem] border border-stone-800/80 bg-[#0d0f0c]/70 p-3">
       <div className="flex items-center justify-between gap-3 text-sm">
         <div className="flex min-w-0 items-center gap-2 text-stone-200">
           {done ? <CheckCircle2 className="h-4 w-4 text-teal-300" /> : <Loader2 className="h-4 w-4 animate-spin text-amber-300" />}
@@ -52,7 +52,7 @@ export function JobStatus({ job, error }: JobStatusProps) {
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-800">
         <div
-          className="h-full rounded-full bg-amber-300 transition-all duration-500"
+          className="h-full rounded-full bg-gradient-to-r from-amber-300 via-teal-300 to-rose-300 transition-all duration-500"
           style={{ width: `${job?.progressPercent ?? 0}%` }}
         />
       </div>

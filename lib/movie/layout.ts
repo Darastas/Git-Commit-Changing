@@ -89,8 +89,8 @@ export function buildCodeCityLayout(movie: RepoMovie, width: number, height: num
     };
     districts.push(district);
 
-    const innerPadding = 14;
-    const labelSpace = 24;
+    const innerPadding = 16;
+    const labelSpace = 28;
     const fileCount = Math.max(1, files.length);
     const buildingColumns = Math.ceil(Math.sqrt(fileCount * (districtWidth / districtHeight)));
     const buildingRows = Math.ceil(fileCount / buildingColumns);
@@ -100,8 +100,11 @@ export function buildCodeCityLayout(movie: RepoMovie, width: number, height: num
     files.forEach((file, fileIndex) => {
       const fileColumn = fileIndex % buildingColumns;
       const fileRow = Math.floor(fileIndex / buildingColumns);
-      const footprint = Math.max(16, Math.min(44, cellWidth * (0.48 + file.sizeScore * 0.34)));
-      const buildingHeight = Math.max(24, Math.min(cellHeight * 0.92, 20 + file.sizeScore * 72));
+      const footprint = Math.max(16, Math.min(42, cellWidth * (0.42 + file.sizeScore * 0.34)));
+      const towerHeight = Math.max(
+        34,
+        Math.min(190, 30 + Math.pow(file.sizeScore, 0.72) * 132 + file.activityScore * 28)
+      );
       const centerX = x + innerPadding + fileColumn * cellWidth + cellWidth / 2;
       const baseY = y + labelSpace + innerPadding + (fileRow + 1) * cellHeight - 4;
 
@@ -112,9 +115,9 @@ export function buildCodeCityLayout(movie: RepoMovie, width: number, height: num
         language: file.language,
         color: file.color,
         x: centerX - footprint / 2,
-        y: baseY - buildingHeight,
+        y: baseY - towerHeight,
         width: footprint,
-        height: buildingHeight,
+        height: towerHeight,
         activityScore: file.activityScore,
         sizeScore: file.sizeScore,
         status: file.status

@@ -12,7 +12,7 @@ type CommitPanelProps = {
 
 export function CommitPanel({ commit, index, total }: CommitPanelProps) {
   return (
-    <section className="rounded-md border border-stone-800 bg-stone-950/55 p-4">
+    <section className="rounded-[0.45rem] border border-stone-800/80 bg-[#0d0f0c]/78 p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           {commit.authorAvatar ? (
@@ -29,11 +29,11 @@ export function CommitPanel({ commit, index, total }: CommitPanelProps) {
             </div>
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-stone-100">{commit.message}</p>
+            <p className="truncate text-sm font-semibold leading-5 text-stone-100">{commit.message}</p>
             <p className="truncate text-xs text-stone-400">{commit.authorName}</p>
           </div>
         </div>
-        <div className="rounded-md border border-stone-800 bg-stone-900 px-2 py-1 font-mono text-xs text-stone-300">
+        <div className="rounded-[0.35rem] border border-stone-700/80 bg-[#090b0a] px-2 py-1 font-mono text-xs text-stone-300">
           {index + 1}/{total}
         </div>
       </div>
@@ -49,8 +49,10 @@ export function CommitPanel({ commit, index, total }: CommitPanelProps) {
         </div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-        <div className="rounded-md bg-emerald-400/10 px-3 py-2 text-emerald-200">+{commit.additions}</div>
-        <div className="rounded-md bg-red-400/10 px-3 py-2 text-red-200">-{commit.deletions}</div>
+        <div className="rounded-[0.35rem] border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-emerald-200">
+          +{commit.additions}
+        </div>
+        <div className="rounded-[0.35rem] border border-red-300/20 bg-red-400/10 px-3 py-2 text-red-200">-{commit.deletions}</div>
       </div>
     </section>
   );

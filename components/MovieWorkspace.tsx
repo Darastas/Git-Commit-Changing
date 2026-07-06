@@ -104,25 +104,53 @@ export function MovieWorkspace() {
   const visibleMovie = movie ?? sampleMovie;
 
   return (
-    <main className="mx-auto grid min-h-screen max-w-[96rem] gap-4 px-4 py-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <aside className="grid content-start gap-4">
-        <section className="rounded-md border border-stone-800 bg-stone-950/65 p-4">
-          <div className="mb-4">
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber-300">Repo Movie Machine</p>
-            <h2 className="mt-2 text-xl font-semibold text-stone-50">Code city movies from GitHub history.</h2>
-          </div>
+    <main className="min-h-screen px-3 py-3 text-stone-100 sm:px-4 sm:py-4">
+      <div className="mx-auto grid max-w-[100rem] gap-3 lg:grid-cols-[21rem_minmax(0,1fr)]">
+        <aside className="grid content-start gap-3 lg:sticky lg:top-4">
+          <section className="rounded-[0.45rem] border border-stone-700/80 bg-[#10120f]/88 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+            <div className="mb-4">
+              <p className="font-mono text-[0.68rem] uppercase text-amber-300">Repo Movie Machine</p>
+              <h2 className="mt-2 text-xl font-semibold leading-tight text-stone-50">
+                Turn commits into a live code skyline.
+              </h2>
+            </div>
           <RepoInput onSubmit={startJob} isLoading={loading} initialRepo={initialRepo} />
           <div className="mt-4">
             <ExampleGallery onSelect={(repo) => startJob(repo, 30)} disabled={loading} />
           </div>
         </section>
         <JobStatus job={job} error={error} />
-        <section className="rounded-md border border-stone-800 bg-stone-950/45 p-4 text-xs leading-5 text-stone-400">
-          GitHub token stays on the server. Without <span className="font-mono text-stone-200">GITHUB_TOKEN</span>, public
-          API rate limits are lower.
+        <section className="rounded-[0.45rem] border border-stone-800/90 bg-[#0d0f0c]/78 p-4">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div>
+              <p className="font-mono text-lg font-semibold text-stone-50">{visibleMovie.stats.totalCommits}</p>
+              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">commits</p>
+            </div>
+            <div>
+              <p className="font-mono text-lg font-semibold text-stone-50">{visibleMovie.stats.activeFiles}</p>
+              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">active</p>
+            </div>
+            <div>
+              <p className="font-mono text-lg font-semibold text-stone-50">{visibleMovie.directories.length}</p>
+              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">districts</p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {visibleMovie.stats.primaryLanguages.slice(0, 5).map((language) => (
+              <div key={language.language} className="grid grid-cols-[0.75rem_minmax(0,1fr)_auto] items-center gap-2 text-xs">
+                <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: language.color }} />
+                <span className="truncate text-stone-300">{language.language}</span>
+                <span className="font-mono text-stone-500">{language.files}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section className="rounded-[0.45rem] border border-stone-800/80 bg-[#0d0f0c]/60 p-4 text-xs leading-5 text-stone-400">
+          Server-only GitHub access. No token is exposed to the browser.
         </section>
       </aside>
       <MoviePlayer key={`${visibleMovie.repo.fullName}:${visibleMovie.repo.latestSha}`} movie={visibleMovie} jobId={movie ? job?.id : undefined} />
+      </div>
     </main>
   );
 }

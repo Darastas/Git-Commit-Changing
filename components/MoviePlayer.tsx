@@ -81,19 +81,34 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
     setPlaying(true);
   }
 
+  const languageStrip = movie.stats.primaryLanguages.slice(0, 6);
+
   return (
-    <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_19rem]">
+    <div className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_19rem]">
       <section className="grid min-h-0 gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-stone-800 bg-stone-950/55 p-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold text-stone-100">{movie.repo.fullName}</h1>
-            <p className="truncate text-xs text-stone-400">{movie.repo.description ?? "Repository evolution movie"}</p>
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="rounded-[0.45rem] border border-stone-700/80 bg-[#10120f]/86 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold leading-tight text-stone-50">{movie.repo.fullName}</h1>
+              <p className="truncate text-xs text-stone-400">{movie.repo.description ?? "Repository evolution movie"}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-[0.68rem] uppercase text-stone-400">
+                <span className="rounded-[0.3rem] border border-stone-700/80 bg-[#090b0a]/80 px-2 py-1">
+                  {movie.stats.totalCommits} commits
+                </span>
+                <span className="rounded-[0.3rem] border border-stone-700/80 bg-[#090b0a]/80 px-2 py-1">
+                  {movie.stats.totalFiles} files
+                </span>
+                <span className="rounded-[0.3rem] border border-stone-700/80 bg-[#090b0a]/80 px-2 py-1">
+                  {movie.repo.defaultBranch}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
             <button
               type="button"
               aria-label="Jump to start"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-stone-700 bg-stone-900 text-stone-200 hover:border-amber-300"
+              title="Jump to start"
+              className="flex h-9 w-9 items-center justify-center rounded-[0.35rem] border border-stone-700 bg-[#090b0a] text-stone-200 hover:border-amber-300"
               onClick={() => setFrameIndex(0)}
             >
               <SkipBack className="h-4 w-4" />
@@ -101,7 +116,8 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
             <button
               type="button"
               aria-label={playing ? "Pause movie" : "Play movie"}
-              className="flex h-9 w-9 items-center justify-center rounded-md bg-amber-300 text-stone-950 hover:bg-amber-200"
+              title={playing ? "Pause movie" : "Play movie"}
+              className="flex h-9 w-9 items-center justify-center rounded-[0.35rem] bg-amber-300 text-stone-950 shadow-[0_0_28px_rgba(250,204,21,0.24)] hover:bg-amber-200"
               onClick={() => setPlaying((current) => !current)}
             >
               {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}
@@ -109,14 +125,15 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
             <button
               type="button"
               aria-label="Jump to end"
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-stone-700 bg-stone-900 text-stone-200 hover:border-amber-300"
+              title="Jump to end"
+              className="flex h-9 w-9 items-center justify-center rounded-[0.35rem] border border-stone-700 bg-[#090b0a] text-stone-200 hover:border-amber-300"
               onClick={() => setFrameIndex(frameMax)}
             >
               <SkipForward className="h-4 w-4" />
             </button>
             <select
               aria-label="Playback speed"
-              className="h-9 rounded-md border border-stone-700 bg-stone-900 px-2 text-xs text-stone-200"
+              className="h-9 rounded-[0.35rem] border border-stone-700 bg-[#090b0a] px-2 text-xs text-stone-200"
               value={speed}
               onChange={(event) => setSpeed(Number(event.target.value))}
             >
@@ -125,6 +142,19 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               <option value={2}>2x</option>
               <option value={4}>4x</option>
             </select>
+            </div>
+          </div>
+          <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-stone-900">
+            {languageStrip.map((language) => (
+              <div
+                key={language.language}
+                title={`${language.language}: ${language.files} files`}
+                style={{
+                  backgroundColor: language.color,
+                  width: `${Math.max(8, (language.files / Math.max(1, movie.stats.totalFiles)) * 100)}%`
+                }}
+              />
+            ))}
           </div>
         </div>
 
@@ -136,7 +166,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
           onSelectFile={setSelectedPath}
         />
 
-        <div className="rounded-md border border-stone-800 bg-stone-950/55 p-3">
+        <div className="rounded-[0.45rem] border border-stone-800/80 bg-[#10120f]/78 p-3">
           <Timeline frameIndex={frameIndex} max={frameMax} onChange={setFrameIndex} />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400">
             <span>
@@ -146,7 +176,8 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               {shareUrl ? (
                 <button
                   type="button"
-                  className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-700 px-2.5 text-stone-200 hover:border-teal-300"
+                  title="Copy share link"
+                  className="inline-flex h-8 items-center gap-2 rounded-[0.35rem] border border-stone-700 bg-[#090b0a]/70 px-2.5 text-stone-200 hover:border-teal-300"
                   onClick={() => void navigator.clipboard.writeText(shareUrl)}
                 >
                   <Share2 className="h-3.5 w-3.5" />
@@ -155,7 +186,8 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               ) : null}
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-700 px-2.5 text-stone-200 hover:border-teal-300"
+                title="Export RepoMovie JSON"
+                className="inline-flex h-8 items-center gap-2 rounded-[0.35rem] border border-stone-700 bg-[#090b0a]/70 px-2.5 text-stone-200 hover:border-teal-300"
                 onClick={() => {
                   downloadBlob(
                     `${movie.repo.owner}-${movie.repo.name}-movie.json`,
@@ -168,7 +200,8 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               </button>
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-700 px-2.5 text-stone-200 hover:border-teal-300"
+                title="Export PNG snapshot"
+                className="inline-flex h-8 items-center gap-2 rounded-[0.35rem] border border-stone-700 bg-[#090b0a]/70 px-2.5 text-stone-200 hover:border-teal-300"
                 onClick={() => {
                   canvasRef.current?.toBlob((blob) => {
                     if (blob) {
@@ -182,7 +215,8 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               </button>
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-700 px-2.5 text-stone-200 hover:border-teal-300"
+                title="Record WebM"
+                className="inline-flex h-8 items-center gap-2 rounded-[0.35rem] border border-stone-700 bg-[#090b0a]/70 px-2.5 text-stone-200 hover:border-teal-300"
                 onClick={toggleRecording}
               >
                 <Video className="h-3.5 w-3.5" />
@@ -192,7 +226,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
           </div>
         </div>
       </section>
-      <aside className="grid content-start gap-4">
+      <aside className="grid content-start gap-3">
         {commit ? <CommitPanel commit={commit} index={frameIndex} total={movie.commits.length} /> : null}
         <FileInspector file={selectedFile} />
       </aside>

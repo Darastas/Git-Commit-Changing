@@ -10,7 +10,7 @@ export function Timeline({ frameIndex, max, onChange }: TimelineProps) {
   return (
     <input
       aria-label="Movie timeline"
-      className="h-2 w-full accent-amber-300"
+      className="movie-timeline h-4 w-full"
       type="range"
       min={0}
       max={Math.max(0, max)}
