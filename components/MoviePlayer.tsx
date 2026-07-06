@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileJson, Pause, Play, Share2, SkipBack, SkipForward } from "lucide-react";
+import { Download, FileJson, Pause, Play, Share2, SkipBack, SkipForward, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RepoMovie } from "@/lib/movie/repo-movie-types";
 import { CodeCityCanvas } from "./CodeCityCanvas";
@@ -25,9 +25,12 @@ function downloadBlob(filename: string, blob: Blob) {
 export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
+  const [recording, setRecording] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [selectedPath, setSelectedPath] = useState<string | undefined>(() => Object.keys(movie.files)[0]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
   const frameMax = Math.max(0, movie.frames.length - 1);
   const commit = movie.commits[Math.min(frameIndex, movie.commits.length - 1)] ?? movie.commits[0];
   const selectedFile = selectedPath ? movie.files[selectedPath] : undefined;
@@ -47,6 +50,36 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
     }, 1200 / speed);
     return () => window.clearInterval(interval);
   }, [frameMax, playing, speed]);
+
+  function toggleRecording() {
+    if (recording) {
+      recorderRef.current?.stop();
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas || !("captureStream" in canvas) || !("MediaRecorder" in window)) {
+      return;
+    }
+
+    chunksRef.current = [];
+    const stream = canvas.captureStream(30);
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunksRef.current.push(event.data);
+      }
+    };
+    recorder.onstop = () => {
+      setRecording(false);
+      stream.getTracks().forEach((track) => track.stop());
+      downloadBlob(`${movie.repo.owner}-${movie.repo.name}-movie.webm`, new Blob(chunksRef.current, { type: "video/webm" }));
+    };
+    recorderRef.current = recorder;
+    recorder.start();
+    setRecording(true);
+    setPlaying(true);
+  }
 
   return (
     <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_19rem]">
@@ -146,6 +179,14 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               >
                 <Download className="h-3.5 w-3.5" />
                 PNG
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-stone-700 px-2.5 text-stone-200 hover:border-teal-300"
+                onClick={toggleRecording}
+              >
+                <Video className="h-3.5 w-3.5" />
+                {recording ? "Stop" : "WebM"}
               </button>
             </div>
           </div>

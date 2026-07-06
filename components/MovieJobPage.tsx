@@ -45,10 +45,16 @@ export function MovieJobPage({ jobId }: MovieJobPageProps) {
       }
     }
     void load();
+    const interval = window.setInterval(() => {
+      if (!movie) {
+        void load();
+      }
+    }, 1200);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
     };
-  }, [jobId]);
+  }, [jobId, movie]);
 
   return (
     <main className="mx-auto min-h-screen max-w-[96rem] px-4 py-4">
