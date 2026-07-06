@@ -52,4 +52,18 @@ describe("MoviePlayer", () => {
     expect(writeText).toHaveBeenCalledWith("http://localhost:3000/movie/job-123");
     expect(await screen.findByText("Copied")).toBeTruthy();
   });
+
+  it("shows a clear state when the share URL could not be copied", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard blocked"));
+    Object.assign(navigator, {
+      clipboard: { writeText }
+    });
+
+    render(<MoviePlayer movie={sampleMovie} jobId="job-123" />);
+
+    fireEvent.click(screen.getByText("Share"));
+
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/movie/job-123");
+    expect(await screen.findByText("Copy failed")).toBeTruthy();
+  });
 });

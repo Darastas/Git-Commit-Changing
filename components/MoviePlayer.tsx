@@ -26,7 +26,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [recording, setRecording] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [speed, setSpeed] = useState(1);
   const [selectedPath, setSelectedPath] = useState<string | undefined>(() => Object.keys(movie.files)[0]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -83,6 +83,9 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
   }
 
   const languageStrip = movie.stats.primaryLanguages.slice(0, 6);
+  const shareLabel = shareStatus === "copied" ? "Copied" : shareStatus === "failed" ? "Copy failed" : "Share";
+  const shareTitle =
+    shareStatus === "copied" ? "Share link copied" : shareStatus === "failed" ? "Could not copy share link" : "Copy share link";
 
   return (
     <div className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_19rem]">
@@ -177,16 +180,21 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               {shareUrl ? (
                 <button
                   type="button"
-                  aria-label={shareCopied ? "Share link copied" : "Copy share link"}
-                  title={shareCopied ? "Share link copied" : "Copy share link"}
+                  aria-label={shareTitle}
+                  title={shareTitle}
                   className="inline-flex h-8 items-center gap-2 rounded-[0.35rem] border border-stone-700 bg-[#090b0a]/70 px-2.5 text-stone-200 hover:border-teal-300"
                   onClick={async () => {
-                    await navigator.clipboard.writeText(shareUrl);
-                    setShareCopied(true);
+                    setShareStatus("idle");
+                    try {
+                      await navigator.clipboard.writeText(shareUrl);
+                      setShareStatus("copied");
+                    } catch {
+                      setShareStatus("failed");
+                    }
                   }}
                 >
                   <Share2 className="h-3.5 w-3.5" />
-                  {shareCopied ? "Copied" : "Share"}
+                  {shareLabel}
                 </button>
               ) : null}
               <button
