@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { InMemoryJobStore } from "@/lib/jobs/in-memory-job-store";
+import { InMemoryJobStore, getJobStore } from "@/lib/jobs/in-memory-job-store";
 import { createAnalysisJob } from "@/lib/jobs/queue";
 import { InMemoryMovieStorage } from "@/lib/storage/in-memory-storage";
 import { enforceRequestCooldown, normalizeCommitLimit } from "@/lib/security/limits";
+import { analyzeJob } from "@/worker/analyze-job";
 
 describe("InMemoryJobStore", () => {
   it("creates queued jobs and allows progress updates without losing immutable fields", async () => {
@@ -89,5 +90,80 @@ describe("createAnalysisJob", () => {
       commitLimit: 30,
       status: "queued"
     });
+  });
+});
+
+describe("analyzeJob", () => {
+  it("uses summary commits without per-commit detail fan-out when GITHUB_TOKEN is absent", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+
+    vi.stubEnv("GITHUB_TOKEN", "");
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+
+      if (url.endsWith("/repos/octocat/rate-limit-lab")) {
+        return Response.json({
+          owner: { login: "octocat" },
+          name: "rate-limit-lab",
+          full_name: "octocat/rate-limit-lab",
+          html_url: "https://github.com/octocat/rate-limit-lab",
+          default_branch: "main",
+          description: "Rate limit fixture",
+          stargazers_count: 12,
+          language: "TypeScript",
+          archived: false
+        });
+      }
+
+      if (url.endsWith("/repos/octocat/rate-limit-lab/branches/main")) {
+        return Response.json({ commit: { sha: "latest000" } });
+      }
+
+      if (url.includes("/repos/octocat/rate-limit-lab/commits?")) {
+        return Response.json([
+          {
+            sha: "cccc3333",
+            commit: {
+              message: "Sketch the first city blocks",
+              author: { name: "Ada", date: "2024-01-01T00:00:00Z" }
+            },
+            author: { login: "ada", avatar_url: "https://example.com/ada.png" }
+          },
+          {
+            sha: "dddd4444",
+            commit: {
+              message: "Tune playback controls",
+              author: { name: "Lin", date: "2024-01-02T00:00:00Z" }
+            },
+            author: { login: "lin", avatar_url: "https://example.com/lin.png" }
+          }
+        ]);
+      }
+
+      return new Response("unexpected request", { status: 500 });
+    });
+
+    try {
+      const job = await getJobStore().create({
+        repo: "octocat/rate-limit-lab",
+        normalizedRepo: "octocat/rate-limit-lab",
+        commitLimit: 60
+      });
+
+      const movie = await analyzeJob(job.id);
+      const updatedJob = await getJobStore().get(job.id);
+
+      expect(movie?.events).toHaveLength(2);
+      expect(movie?.frames).toHaveLength(2);
+      expect(updatedJob?.status).toBe("succeeded");
+      expect(
+        calls.some((url) => url.includes("/commits/cccc3333") || url.includes("/commits/dddd4444"))
+      ).toBe(false);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+      vi.unstubAllEnvs();
+    }
   });
 });

@@ -29,6 +29,14 @@ function asJobError(error: unknown) {
   };
 }
 
+function hasGitHubToken() {
+  return Boolean(process.env.GITHUB_TOKEN?.trim());
+}
+
+function canFallBackToCommitSummaries(error: unknown) {
+  return error instanceof GitHubClientError && error.details.code === "github_rate_limited";
+}
+
 export async function analyzeJob(jobId: string) {
   const jobStore = getJobStore();
   const storage = getMovieStorage();
@@ -78,19 +86,41 @@ export async function analyzeJob(jobId: string) {
       progressStage: "fetching-commits",
       progressPercent: 28
     });
-    const commits = await client.getCommitDetails(
+    const commitSummaries = await client.getCommitSummaries(
       repo.owner,
       repo.name,
       repo.defaultBranch,
-      job.commitLimit,
-      (completed, total) => {
-        const percent = 28 + Math.round((completed / Math.max(1, total)) * 42);
-        void jobStore.update(job.id, {
-          progressStage: "fetching-commits",
-          progressPercent: Math.min(70, percent)
-        });
-      }
+      job.commitLimit
     );
+
+    let commits = commitSummaries;
+    if (hasGitHubToken()) {
+      try {
+        commits = await client.getCommitDetails(
+          repo.owner,
+          repo.name,
+          repo.defaultBranch,
+          job.commitLimit,
+          (completed, total) => {
+            const percent = 35 + Math.round((completed / Math.max(1, total)) * 35);
+            void jobStore.update(job.id, {
+              progressStage: "fetching-commits",
+              progressPercent: Math.min(70, percent)
+            });
+          },
+          commitSummaries
+        );
+      } catch (error) {
+        if (!canFallBackToCommitSummaries(error)) {
+          throw error;
+        }
+      }
+    }
+
+    await jobStore.update(job.id, {
+      progressStage: "fetching-commits",
+      progressPercent: 70
+    });
 
     await jobStore.update(job.id, {
       progressStage: "analyzing-changes",

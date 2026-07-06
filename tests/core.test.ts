@@ -77,6 +77,43 @@ describe("buildRepoMovieFromGitHub", () => {
     expect(movie.stats.totalAdditions).toBe(277);
     expect(movie.stats.primaryLanguages[0].language).toBe("TypeScript");
   });
+
+  it("creates a playable summary movie when commit details do not include file lists", () => {
+    const movie = buildRepoMovieFromGitHub({
+      repo,
+      commitLimit: 60,
+      commits: [
+        {
+          sha: "cccc3333",
+          commit: {
+            message: "Sketch the first city blocks",
+            author: { name: "Ada", date: "2024-01-01T00:00:00Z" }
+          },
+          author: { login: "ada", avatar_url: "https://example.com/ada.png" }
+        },
+        {
+          sha: "dddd4444",
+          commit: {
+            message: "Tune playback controls",
+            author: { name: "Lin", date: "2024-01-02T00:00:00Z" }
+          },
+          author: { login: "lin", avatar_url: "https://example.com/lin.png" }
+        }
+      ] satisfies GitHubCommitDetail[]
+    });
+
+    expect(movie.commits).toHaveLength(2);
+    expect(movie.events).toHaveLength(2);
+    expect(movie.frames).toHaveLength(2);
+    expect(movie.commits[0].changedFiles[0]).toMatchObject({
+      path: ".repo/activity/cccc333.ts",
+      status: "modified",
+      language: "TypeScript"
+    });
+    expect(movie.frames[0].changedFilePaths).toEqual([".repo/activity/cccc333.ts"]);
+    expect(movie.stats.totalFiles).toBe(2);
+    expect(movie.stats.totalChanges).toBeGreaterThan(0);
+  });
 });
 
 describe("buildMovieCacheKey", () => {
@@ -95,6 +132,46 @@ describe("buildMovieCacheKey", () => {
 });
 
 describe("mapGitHubError", () => {
+  it("fetches summary commits with one list API call", async () => {
+    const calls: string[] = [];
+    const client = new GitHubClient({
+      fetchImpl: async (input) => {
+        calls.push(String(input));
+        return Response.json([
+          {
+            sha: "cccc3333",
+            commit: {
+              message: "Sketch the first city blocks",
+              author: { name: "Ada", date: "2024-01-01T00:00:00Z" },
+              committer: { name: "Ada", date: "2024-01-01T00:00:00Z" }
+            },
+            author: {
+              login: "ada",
+              avatar_url: "https://example.com/ada.png"
+            }
+          }
+        ]);
+      }
+    });
+
+    const commits = await client.getCommitSummaries("octocat", "Hello-World", "main", 53);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("/repos/octocat/Hello-World/commits?sha=main&per_page=53");
+    expect(commits[0]).toMatchObject({
+      sha: "cccc3333",
+      commit: {
+        message: "Sketch the first city blocks",
+        author: { name: "Ada", date: "2024-01-01T00:00:00Z" }
+      },
+      author: {
+        login: "ada",
+        avatar_url: "https://example.com/ada.png"
+      }
+    });
+    expect(commits[0].files).toBeUndefined();
+  });
+
   it("maps rate-limit responses to a retryable user-facing error", () => {
     const mapped = mapGitHubError(
       new Response("rate limited", {

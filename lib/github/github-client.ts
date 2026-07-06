@@ -23,6 +23,15 @@ type GitHubRepoResponse = {
 
 type GitHubCommitListResponse = Array<{
   sha: string;
+  commit?: {
+    message?: string;
+    author?: GitHubCommitDetail["commit"]["author"];
+    committer?: GitHubCommitDetail["commit"]["committer"];
+  };
+  author?: {
+    login?: string;
+    avatar_url?: string;
+  } | null;
 }>;
 
 const GITHUB_API_BASE = "https://api.github.com";
@@ -137,7 +146,25 @@ export class GitHubClient {
     repo: string,
     branch: string,
     limit: number,
-    onProgress?: (completed: number, total: number) => void
+    onProgress?: (completed: number, total: number) => void,
+    commitSummaries?: GitHubCommitDetail[]
+  ): Promise<GitHubCommitDetail[]> {
+    const commits = commitSummaries ?? (await this.getCommitSummaries(owner, repo, branch, limit));
+
+    const details: GitHubCommitDetail[] = [];
+    for (const [index, commit] of commits.slice(0, limit).entries()) {
+      details.push(await this.request<GitHubCommitDetail>(`/repos/${owner}/${repo}/commits/${commit.sha}`));
+      onProgress?.(index + 1, commits.length);
+    }
+
+    return details;
+  }
+
+  async getCommitSummaries(
+    owner: string,
+    repo: string,
+    branch: string,
+    limit: number
   ): Promise<GitHubCommitDetail[]> {
     const commits = await this.request<GitHubCommitListResponse>(
       `/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`
@@ -152,13 +179,20 @@ export class GitHubClient {
       });
     }
 
-    const details: GitHubCommitDetail[] = [];
-    for (const [index, commit] of commits.slice(0, limit).entries()) {
-      details.push(await this.request<GitHubCommitDetail>(`/repos/${owner}/${repo}/commits/${commit.sha}`));
-      onProgress?.(index + 1, commits.length);
-    }
-
-    return details;
+    return commits.slice(0, limit).map((commit) => ({
+      sha: commit.sha,
+      commit: {
+        message: commit.commit?.message ?? "(no commit message)",
+        author: commit.commit?.author ?? null,
+        committer: commit.commit?.committer ?? null
+      },
+      author: commit.author
+        ? {
+            login: commit.author.login,
+            avatar_url: commit.author.avatar_url
+          }
+        : null
+    }));
   }
 
   private async request<T>(path: string): Promise<T> {

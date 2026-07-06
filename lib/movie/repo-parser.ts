@@ -1,4 +1,4 @@
-import type { GitHubCommitDetail, GitHubRepoMetadata } from "@/lib/github/github-types";
+import type { GitHubChangedFile, GitHubCommitDetail, GitHubRepoMetadata } from "@/lib/github/github-types";
 import { inferLanguage } from "./language";
 import type {
   MovieChangeEvent,
@@ -37,6 +37,55 @@ function directoryName(path: string) {
   return parts.join("/") || ".";
 }
 
+const summaryLanguageExtensions: Record<string, string> = {
+  TypeScript: "ts",
+  JavaScript: "js",
+  Python: "py",
+  Go: "go",
+  Rust: "rs",
+  Java: "java",
+  Kotlin: "kt",
+  Swift: "swift",
+  PHP: "php",
+  Ruby: "rb",
+  HTML: "html",
+  CSS: "css",
+  SCSS: "scss",
+  Vue: "vue",
+  Svelte: "svelte",
+  Markdown: "md",
+  JSON: "json",
+  YAML: "yml",
+  Shell: "sh",
+  Docker: "Dockerfile"
+};
+
+function summaryActivityPath(commit: GitHubCommitDetail, primaryLanguage?: string) {
+  const shortSha = commit.sha.slice(0, 7) || "commit";
+  const extension = primaryLanguage ? summaryLanguageExtensions[primaryLanguage] : undefined;
+
+  if (extension === "Dockerfile") {
+    return `.repo/activity/${shortSha}.Dockerfile`;
+  }
+
+  return `.repo/activity/${shortSha}.${extension ?? "commit"}`;
+}
+
+function summaryChangedFiles(commit: GitHubCommitDetail, primaryLanguage?: string): GitHubChangedFile[] {
+  const messageLength = commit.commit.message.trim().length;
+  const changes = Math.max(1, Math.min(8, Math.ceil(messageLength / 24)));
+
+  return [
+    {
+      filename: summaryActivityPath(commit, primaryLanguage),
+      status: "modified",
+      additions: changes,
+      deletions: 0,
+      changes
+    }
+  ];
+}
+
 function commitDate(commit: GitHubCommitDetail) {
   return (
     commit.commit.author?.date ??
@@ -45,8 +94,13 @@ function commitDate(commit: GitHubCommitDetail) {
   );
 }
 
-function toMovieCommit(commit: GitHubCommitDetail): MovieCommit {
-  const changedFiles = (commit.files ?? []).map((file) => {
+function toMovieCommit(commit: GitHubCommitDetail, primaryLanguage?: string): MovieCommit {
+  const sourceFiles =
+    commit.files && commit.files.length > 0
+      ? commit.files
+      : summaryChangedFiles(commit, primaryLanguage);
+
+  const changedFiles = sourceFiles.map((file) => {
     const language = inferLanguage(file.filename);
     return {
       path: file.filename,
@@ -149,7 +203,9 @@ export function buildRepoMovieFromGitHub(input: BuildRepoMovieInput): RepoMovie 
   const chronologicalCommits = [...input.commits].sort(
     (a, b) => new Date(commitDate(a)).getTime() - new Date(commitDate(b)).getTime()
   );
-  const movieCommits = chronologicalCommits.map(toMovieCommit);
+  const movieCommits = chronologicalCommits.map((commit) =>
+    toMovieCommit(commit, input.repo.primaryLanguage)
+  );
   const files: Record<string, MovieFile> = {};
   const events: MovieChangeEvent[] = [];
   const frames: MovieFrame[] = [];
