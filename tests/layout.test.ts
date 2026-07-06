@@ -121,10 +121,16 @@ describe("buildCommitTrend", () => {
     const trend = buildCommitTrend(movie);
     const early = buildDynamicTrendScales(trend, 0.02);
     const late = buildDynamicTrendScales(trend, 0.8);
+    const final = buildDynamicTrendScales(trend, 1);
 
     expect(early.commitMax).toBeLessThan(late.commitMax);
     expect(early.starMax).toBeLessThan(late.starMax);
+    expect(early.timeEnd - early.timeStart).toBeLessThan(late.timeEnd - late.timeStart);
     expect(late.finalCommitMax).toBe(40);
     expect(late.finalStarMax).toBe(5000);
+    expect(final.commitMax).toBe(final.finalCommitMax);
+    expect(final.starMax).toBe(final.finalStarMax);
+    expect(final.timeStart).toBe(final.finalTimeStart);
+    expect(final.timeEnd).toBe(final.finalTimeEnd);
   });
 });

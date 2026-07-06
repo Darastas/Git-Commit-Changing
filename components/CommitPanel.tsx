@@ -10,6 +10,12 @@ type CommitPanelProps = {
   onSelectCommit: (index: number) => void;
 };
 
+const MAX_VISIBLE_TRAIL_COMMITS = 80;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function formatCommitDate(value: string) {
   const date = new Date(value);
 
@@ -52,6 +58,12 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
   const authorHandle = commit.authorLogin ? `@${commit.authorLogin}` : commit.authorName;
   const visibleFiles = commit.changedFiles.slice(0, 5);
   const hiddenFileCount = Math.max(0, commit.changedFiles.length - visibleFiles.length);
+  const trailStart =
+    commits.length <= MAX_VISIBLE_TRAIL_COMMITS
+      ? 0
+      : clamp(currentIndex - Math.floor(MAX_VISIBLE_TRAIL_COMMITS / 2), 0, commits.length - MAX_VISIBLE_TRAIL_COMMITS);
+  const visibleTrailCommits = commits.slice(trailStart, trailStart + MAX_VISIBLE_TRAIL_COMMITS);
+  const trailEnd = trailStart + visibleTrailCommits.length;
 
   return (
     <section className="rounded-[0.45rem] border border-stone-800/80 bg-[#0d0f0c]/86 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.22)]">
@@ -133,10 +145,15 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
       <div className="mt-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-xs font-semibold uppercase text-stone-400">Commit trail</h2>
-          <span className="text-xs text-stone-500">{commits.length} commits</span>
+          <span className="text-xs text-stone-500">
+            {commits.length > visibleTrailCommits.length
+              ? `${trailStart + 1}-${trailEnd} of ${commits.length}`
+              : `${commits.length} commits`}
+          </span>
         </div>
         <div className="grid gap-2">
-          {commits.map((trailCommit, trailIndex) => {
+          {visibleTrailCommits.map((trailCommit, trailOffset) => {
+            const trailIndex = trailStart + trailOffset;
             const trailDate = formatCommitDate(trailCommit.date);
             const isCurrent = trailIndex === currentIndex;
 

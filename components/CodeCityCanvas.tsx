@@ -38,6 +38,7 @@ type ChartPoint = {
   x: number;
   y: number;
   source: CommitTrendPoint;
+  index: number;
 };
 
 type ChangedFile = CommitTrendPoint["changedFiles"][number];
@@ -62,6 +63,9 @@ type ChartPalette = {
 
 const CANVAS_MIN_RENDER_SCALE = 2;
 const CANVAS_MAX_RENDER_SCALE = 3;
+const MAX_CURVE_SAMPLES = 420;
+const MAX_COMMIT_MARKERS = 120;
+const MAX_STAR_MARKERS = 90;
 const CANVAS_FONT_SANS = 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 const CANVAS_FONT_MONO = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
 
@@ -158,11 +162,20 @@ function getCanvasRenderScale() {
   return clamp(window.devicePixelRatio || 1, CANVAS_MIN_RENDER_SCALE, CANVAS_MAX_RENDER_SCALE);
 }
 
-function formatAxisDate(date: string) {
-  const value = new Date(date);
+function formatAxisTimestamp(timestamp: number, spanMs: number) {
+  const value = new Date(timestamp);
   if (Number.isNaN(value.getTime())) {
-    return date.slice(0, 10);
+    return "";
   }
+
+  if (spanMs < 36 * 60 * 60 * 1000) {
+    return value.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit" });
+  }
+
+  if (spanMs > 365 * 24 * 60 * 60 * 1000) {
+    return value.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  }
+
   return value.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
@@ -173,10 +186,17 @@ function formatStars(value: number) {
   return String(Math.max(0, Math.round(value)));
 }
 
-function formatHudDate(date: string) {
+function formatWholeNumber(value: number) {
+  return Math.max(0, Math.round(value)).toLocaleString("en-US");
+}
+
+function formatHudDate(date: string, compact = false) {
   const value = new Date(date);
   if (Number.isNaN(value.getTime())) {
     return date.slice(0, 10);
+  }
+  if (compact) {
+    return value.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" });
   }
   return value.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
@@ -207,6 +227,24 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) 
 
 function drawFitText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number) {
   ctx.fillText(fitText(ctx, text, maxWidth), x, y);
+}
+
+function setFittedFont(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  weight: number,
+  maxSize: number,
+  minSize: number,
+  family = CANVAS_FONT_SANS
+) {
+  let size = maxSize;
+  ctx.font = `${weight} ${size}px ${family}`;
+  while (size > minSize && ctx.measureText(text).width > maxWidth) {
+    size -= 1;
+    ctx.font = `${weight} ${size}px ${family}`;
+  }
+  return size;
 }
 
 function wrapText(
@@ -286,18 +324,24 @@ function calculateLayout(width: number, height: number): ChartLayout {
   };
 }
 
-function pointX(point: CommitTrendPoint, points: CommitTrendPoint[], chart: Rect, index: number) {
+function pointX(
+  point: CommitTrendPoint,
+  points: CommitTrendPoint[],
+  chart: Rect,
+  index: number,
+  scales: DynamicTrendScales
+) {
   if (points.length <= 1) {
     return chart.x + chart.width * 0.5;
   }
 
-  const minTimestamp = points[0].timestamp;
-  const maxTimestamp = points[points.length - 1].timestamp;
-  if (minTimestamp === maxTimestamp) {
-    return chart.x + (index / (points.length - 1)) * chart.width;
+  if (scales.finalTimeEnd <= scales.finalTimeStart) {
+    const maxVisibleIndex = Math.max(1, scales.commitMax - 1);
+    return chart.x + (index / maxVisibleIndex) * chart.width;
   }
 
-  return chart.x + ((point.timestamp - minTimestamp) / (maxTimestamp - minTimestamp)) * chart.width;
+  const visibleSpan = Math.max(1, scales.timeEnd - scales.timeStart);
+  return chart.x + ((point.timestamp - scales.timeStart) / visibleSpan) * chart.width;
 }
 
 function pointY(value: number, maxValue: number, chart: Rect) {
@@ -305,20 +349,60 @@ function pointY(value: number, maxValue: number, chart: Rect) {
   return chart.y + chart.height - normalized * chart.height;
 }
 
-function buildChartPoints(points: CommitTrendPoint[], chart: Rect, scales: DynamicTrendScales): ChartPoint[] {
-  return points.map((point, index) => ({
-    x: pointX(point, points, chart, index),
+function commitChartPoint(point: CommitTrendPoint, points: CommitTrendPoint[], chart: Rect, index: number, scales: DynamicTrendScales): ChartPoint {
+  return {
+    x: pointX(point, points, chart, index, scales),
     y: pointY(point.cumulativeCommits, scales.commitMax, chart),
-    source: point
-  }));
+    source: point,
+    index
+  };
 }
 
-function buildStarChartPoints(points: CommitTrendPoint[], chart: Rect, scales: DynamicTrendScales): ChartPoint[] {
-  return points.map((point, index) => ({
-    x: pointX(point, points, chart, index),
+function starChartPoint(point: CommitTrendPoint, points: CommitTrendPoint[], chart: Rect, index: number, scales: DynamicTrendScales): ChartPoint {
+  return {
+    x: pointX(point, points, chart, index, scales),
     y: pointY(point.cumulativeStars, Math.max(1, scales.starMax), chart),
-    source: point
-  }));
+    source: point,
+    index
+  };
+}
+
+function visibleEndIndex(points: CommitTrendPoint[], scales: DynamicTrendScales, forcedIndex: number) {
+  let endIndex = Math.min(points.length - 1, Math.max(0, forcedIndex));
+  while (endIndex + 1 < points.length && points[endIndex + 1].timestamp <= scales.timeEnd) {
+    endIndex += 1;
+  }
+  return endIndex;
+}
+
+function buildSampledChartPoints(
+  points: CommitTrendPoint[],
+  chart: Rect,
+  scales: DynamicTrendScales,
+  endIndex: number,
+  maxSamples: number,
+  pointBuilder: (point: CommitTrendPoint, points: CommitTrendPoint[], chart: Rect, index: number, scales: DynamicTrendScales) => ChartPoint,
+  forcedIndexes: number[] = []
+) {
+  if (points.length === 0) {
+    return [];
+  }
+
+  const clampedEndIndex = Math.min(points.length - 1, Math.max(0, endIndex));
+  const stride = Math.max(1, Math.ceil((clampedEndIndex + 1) / maxSamples));
+  const indexSet = new Set<number>([0, clampedEndIndex]);
+  for (let index = 0; index <= clampedEndIndex; index += stride) {
+    indexSet.add(index);
+  }
+  forcedIndexes.forEach((index) => {
+    if (index >= 0 && index <= clampedEndIndex) {
+      indexSet.add(index);
+    }
+  });
+
+  return Array.from(indexSet)
+    .sort((a, b) => a - b)
+    .map((index) => pointBuilder(points[index], points, chart, index, scales));
 }
 
 function curveControls(from: { x: number; y: number }, to: { x: number; y: number }) {
@@ -403,13 +487,22 @@ function drawChartPath(
   appendPathSegments(ctx, points, curveStyle);
 }
 
-function visualCursorPoint(coordinates: ChartPoint[], interpolated: InterpolatedTrendPoint, curveStyle: ChartCurveStyle) {
-  if (coordinates.length <= 1) {
-    return coordinates[0] ?? { x: 0, y: 0 };
+function visualCursorPoint(
+  points: CommitTrendPoint[],
+  chart: Rect,
+  scales: DynamicTrendScales,
+  interpolated: InterpolatedTrendPoint,
+  curveStyle: ChartCurveStyle,
+  pointBuilder: (point: CommitTrendPoint, points: CommitTrendPoint[], chart: Rect, index: number, scales: DynamicTrendScales) => ChartPoint
+) {
+  if (points.length <= 1) {
+    return points[0] ? pointBuilder(points[0], points, chart, 0, scales) : { x: 0, y: 0 };
   }
 
-  const from = coordinates[interpolated.segmentIndex];
-  const to = coordinates[Math.min(coordinates.length - 1, interpolated.segmentIndex + 1)];
+  const fromIndex = interpolated.segmentIndex;
+  const toIndex = Math.min(points.length - 1, interpolated.segmentIndex + 1);
+  const from = pointBuilder(points[fromIndex], points, chart, fromIndex, scales);
+  const to = pointBuilder(points[toIndex], points, chart, toIndex, scales);
   if (curveStyle === "linear") {
     return {
       x: from.x + (to.x - from.x) * interpolated.segmentProgress,
@@ -419,6 +512,80 @@ function visualCursorPoint(coordinates: ChartPoint[], interpolated: Interpolated
 
   const { c1, c2 } = curveControls(from, to);
   return cubicPoint(from, c1, c2, to, interpolated.segmentProgress);
+}
+
+function activeCommitForInterpolation(interpolated: InterpolatedTrendPoint) {
+  return interpolated.segmentProgress >= 0.5 ? interpolated.right : interpolated.left;
+}
+
+function firstCommitMessageLine(message: string) {
+  return message.split(/\r?\n/)[0]?.trim() || "(no commit message)";
+}
+
+function drawCursorAnnotation(
+  ctx: CanvasRenderingContext2D,
+  layout: ChartLayout,
+  cursor: { x: number; y: number },
+  interpolated: InterpolatedTrendPoint,
+  palette: ChartPalette
+) {
+  const { chart, small } = layout;
+  const boxWidth = clamp(chart.width * (small ? 0.76 : 0.42), small ? 148 : 220, small ? 216 : 320);
+  const boxHeight = small ? 62 : 70;
+  const edgePadding = 8;
+  const activeCommit = activeCommitForInterpolation(interpolated);
+  const trailingX = cursor.x - boxWidth - 14;
+  const leadingX = cursor.x + 14;
+  let x = trailingX >= chart.x + edgePadding ? trailingX : leadingX;
+  x = clamp(x, chart.x + edgePadding, chart.x + chart.width - boxWidth - edgePadding);
+
+  let y = cursor.y - boxHeight - 16;
+  if (y < chart.y + edgePadding) {
+    y = cursor.y + 16;
+  }
+  y = clamp(y, chart.y + edgePadding, chart.y + chart.height - boxHeight - edgePadding);
+
+  const anchorX = x > cursor.x ? x : x + boxWidth;
+  const anchorY = y + boxHeight * 0.55;
+
+  ctx.save();
+  ctx.strokeStyle = palette.selectedStroke;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cursor.x, cursor.y);
+  ctx.lineTo(anchorX, anchorY);
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(7, 9, 9, 0.82)";
+  ctx.strokeStyle = palette.selectedStroke;
+  ctx.beginPath();
+  ctx.roundRect(x, y, boxWidth, boxHeight, 8);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = palette.commitGlow;
+  ctx.fillRect(x, y + 9, 2, boxHeight - 18);
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.font = `800 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+  drawFitText(
+    ctx,
+    `Commit #${formatWholeNumber(interpolated.cumulativeCommits)} · ${formatHudDate(activeCommit.date, small)}`,
+    x + 12,
+    y + (small ? 18 : 20),
+    boxWidth - 22
+  );
+
+  ctx.font = `600 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
+  ctx.fillStyle = palette.starStops[2];
+  drawFitText(ctx, `${formatStars(interpolated.cumulativeStars)} stars`, x + 12, y + (small ? 35 : 40), boxWidth - 22);
+
+  ctx.font = `600 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
+  ctx.fillStyle = "rgba(214, 211, 209, 0.78)";
+  drawFitText(ctx, firstCommitMessageLine(activeCommit.message), x + 12, y + (small ? 52 : 59), boxWidth - 22);
+  ctx.restore();
 }
 
 function drawCanvasStar(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) {
@@ -475,7 +642,6 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
 function drawAxes(
   ctx: CanvasRenderingContext2D,
   layout: ChartLayout,
-  points: CommitTrendPoint[],
   palette: ChartPalette,
   scales: DynamicTrendScales
 ) {
@@ -527,15 +693,12 @@ function drawAxes(
 
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  const tickCount = Math.min(small ? 3 : 5, points.length);
-  const used = new Set<number>();
+  const tickCount = small ? 3 : 5;
+  const timeSpan = Math.max(1, scales.timeEnd - scales.timeStart);
   for (let tick = 0; tick < tickCount; tick += 1) {
-    const index = tickCount === 1 ? 0 : Math.round((tick / (tickCount - 1)) * (points.length - 1));
-    if (used.has(index)) {
-      continue;
-    }
-    used.add(index);
-    const x = pointX(points[index], points, chart, index);
+    const tickProgress = tick / (tickCount - 1);
+    const x = chart.x + chart.width * tickProgress;
+    const timestamp = scales.timeStart + timeSpan * tickProgress;
     ctx.strokeStyle = "rgba(231, 229, 228, 0.1)";
     ctx.beginPath();
     ctx.moveTo(x, chart.y);
@@ -549,7 +712,7 @@ function drawAxes(
     } else {
       ctx.textAlign = "center";
     }
-    ctx.fillText(formatAxisDate(points[index].date), x, chart.y + chart.height + 14);
+    ctx.fillText(formatAxisTimestamp(timestamp, timeSpan), x, chart.y + chart.height + 14);
   }
 
   ctx.strokeStyle = "rgba(245, 245, 244, 0.34)";
@@ -594,16 +757,22 @@ function drawTrendCurve(
   scales: DynamicTrendScales
 ) {
   const { chart } = layout;
-  const coordinates = buildChartPoints(points, chart, scales);
   const interpolated = interpolateTrendPoint(points, progress);
   if (!interpolated) {
     return undefined;
   }
-  const cursor = visualCursorPoint(coordinates, interpolated, curveStyle);
-  const revealed = coordinates.slice(0, interpolated.segmentIndex + 1);
+  const visibleIndex = visibleEndIndex(points, scales, Math.min(points.length - 1, interpolated.segmentIndex + 1));
+  const coordinates = buildSampledChartPoints(points, chart, scales, visibleIndex, MAX_CURVE_SAMPLES, commitChartPoint, [
+    interpolated.segmentIndex,
+    Math.min(points.length - 1, interpolated.segmentIndex + 1)
+  ]);
+  const cursor = visualCursorPoint(points, chart, scales, interpolated, curveStyle, commitChartPoint);
+  const revealed = buildSampledChartPoints(points, chart, scales, interpolated.segmentIndex, MAX_CURVE_SAMPLES, commitChartPoint, [
+    interpolated.segmentIndex
+  ]);
   const last = revealed[revealed.length - 1];
   if (!last || Math.abs(last.x - cursor.x) > 0.01 || Math.abs(last.y - cursor.y) > 0.01) {
-    revealed.push({ x: cursor.x, y: cursor.y, source: interpolated.right });
+    revealed.push({ x: cursor.x, y: cursor.y, source: interpolated.right, index: Math.min(points.length - 1, interpolated.segmentIndex + 1) });
   }
 
   ctx.save();
@@ -660,13 +829,16 @@ function drawTrendCurve(
     ctx.stroke();
   }
 
-  const commitMarkerStride = Math.max(1, Math.ceil(coordinates.length / 180));
-  coordinates.forEach((point, index) => {
-    const markerStride = commitMarkerStride;
-    if (index % markerStride !== 0 && index !== coordinates.length - 1 && index !== interpolated.segmentIndex) {
+  const commitMarkerStride = Math.max(1, Math.ceil(coordinates.length / MAX_COMMIT_MARKERS));
+  coordinates.forEach((point, arrayIndex) => {
+    if (
+      arrayIndex % commitMarkerStride !== 0 &&
+      point.index !== coordinates[coordinates.length - 1]?.index &&
+      point.index !== interpolated.segmentIndex
+    ) {
       return;
     }
-    const reached = index <= interpolated.segmentIndex || point.x <= cursor.x;
+    const reached = point.index <= interpolated.segmentIndex || point.x <= cursor.x;
     ctx.beginPath();
     ctx.arc(point.x, point.y, reached ? 4.2 : 3, 0, Math.PI * 2);
     ctx.fillStyle = reached ? "rgba(255, 251, 235, 0.92)" : "rgba(168, 162, 158, 0.34)";
@@ -703,7 +875,7 @@ function drawTrendCurve(
     if (!trailing) {
       continue;
     }
-    const trailingPoint = visualCursorPoint(coordinates, trailing, curveStyle);
+    const trailingPoint = visualCursorPoint(points, chart, scales, trailing, curveStyle, commitChartPoint);
     ctx.fillStyle = `${palette.commitStops[0]}${Math.round((0.22 - trail * 0.045) * 255)
       .toString(16)
       .padStart(2, "0")}`;
@@ -713,6 +885,7 @@ function drawTrendCurve(
   }
 
   ctx.restore();
+  drawCursorAnnotation(ctx, layout, cursor, interpolated, palette);
   return interpolated;
 }
 
@@ -732,17 +905,23 @@ function drawStarTrendCurve(
   }
 
   const { chart } = layout;
-  const coordinates = buildStarChartPoints(points, chart, scales);
   const interpolated = interpolateTrendPoint(points, progress);
   if (!interpolated) {
     return;
   }
 
-  const cursor = visualCursorPoint(coordinates, interpolated, curveStyle);
-  const revealed = coordinates.slice(0, interpolated.segmentIndex + 1);
+  const visibleIndex = visibleEndIndex(points, scales, Math.min(points.length - 1, interpolated.segmentIndex + 1));
+  const coordinates = buildSampledChartPoints(points, chart, scales, visibleIndex, MAX_CURVE_SAMPLES, starChartPoint, [
+    interpolated.segmentIndex,
+    Math.min(points.length - 1, interpolated.segmentIndex + 1)
+  ]);
+  const cursor = visualCursorPoint(points, chart, scales, interpolated, curveStyle, starChartPoint);
+  const revealed = buildSampledChartPoints(points, chart, scales, interpolated.segmentIndex, MAX_CURVE_SAMPLES, starChartPoint, [
+    interpolated.segmentIndex
+  ]);
   const last = revealed[revealed.length - 1];
   if (!last || Math.abs(last.x - cursor.x) > 0.01 || Math.abs(last.y - cursor.y) > 0.01) {
-    revealed.push({ x: cursor.x, y: cursor.y, source: interpolated.right });
+    revealed.push({ x: cursor.x, y: cursor.y, source: interpolated.right, index: Math.min(points.length - 1, interpolated.segmentIndex + 1) });
   }
 
   ctx.save();
@@ -778,13 +957,16 @@ function drawStarTrendCurve(
   ctx.setLineDash([]);
 
   ctx.shadowBlur = 0;
-  const starMarkerStride = Math.max(1, Math.ceil(coordinates.length / 140));
-  coordinates.forEach((point, index) => {
-    const markerStride = starMarkerStride;
-    if (index % markerStride !== 0 && index !== coordinates.length - 1 && index !== interpolated.segmentIndex) {
+  const starMarkerStride = Math.max(1, Math.ceil(coordinates.length / MAX_STAR_MARKERS));
+  coordinates.forEach((point, arrayIndex) => {
+    if (
+      arrayIndex % starMarkerStride !== 0 &&
+      point.index !== coordinates[coordinates.length - 1]?.index &&
+      point.index !== interpolated.segmentIndex
+    ) {
       return;
     }
-    const reached = index <= interpolated.segmentIndex || point.x <= cursor.x;
+    const reached = point.index <= interpolated.segmentIndex || point.x <= cursor.x;
     ctx.fillStyle = reached ? "rgba(186, 230, 253, 0.86)" : "rgba(125, 211, 252, 0.24)";
     drawCanvasStar(ctx, point.x, point.y, reached ? 4.2 : 3.2);
     ctx.fill();
@@ -816,7 +998,7 @@ function drawHudMetric(
   ctx.font = `700 10px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(168, 162, 158, 0.82)";
   ctx.fillText(label.toUpperCase(), x, y);
-  ctx.font = `800 13px ${CANVAS_FONT_SANS}`;
+  setFittedFont(ctx, value, width, 800, 13, 10);
   ctx.fillStyle = "rgba(255, 251, 235, 0.92)";
   drawFitText(ctx, value, x, y + 16, width);
 }
@@ -1014,13 +1196,23 @@ function drawHud(
 
   y += avatarRadius * 2 + (small ? 18 : 24);
 
-  ctx.font = `900 ${small ? 28 : 36}px ${CANVAS_FONT_SANS}`;
+  const currentText = formatWholeNumber(current);
+  const totalText = `/ ${formatWholeNumber(total)} commits`;
+  const countBaseline = y + (small ? 24 : 32);
+  setFittedFont(ctx, currentText, contentWidth, 900, small ? 28 : 36, small ? 20 : 26);
   ctx.fillStyle = "rgba(255, 251, 235, 0.98)";
-  ctx.fillText(String(current), x, y + (small ? 24 : 32));
+  ctx.fillText(currentText, x, countBaseline);
+  const currentWidth = ctx.measureText(currentText).width;
   ctx.font = `800 ${small ? 11 : 13}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = palette.commitStops[1];
-  ctx.fillText(`/ ${total} commits`, x + (small ? 34 : 46), y + (small ? 23 : 30));
-  y += small ? 48 : 60;
+  const totalX = x + currentWidth + (small ? 8 : 10);
+  if (totalX + ctx.measureText(totalText).width <= x + contentWidth) {
+    ctx.fillText(totalText, totalX, countBaseline - (small ? 1 : 2));
+    y += small ? 48 : 60;
+  } else {
+    drawFitText(ctx, totalText, x, countBaseline + (small ? 17 : 20), contentWidth);
+    y += small ? 62 : 76;
+  }
 
   ctx.font = `800 ${small ? 13 : 15}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(245, 245, 244, 0.92)";
@@ -1029,10 +1221,10 @@ function drawHud(
 
   const columnGap = small ? 8 : 12;
   const metricWidth = (contentWidth - columnGap) / 2;
-  drawHudMetric(ctx, "Date", formatHudDate(point.date), x, y, metricWidth);
+  drawHudMetric(ctx, "Date", formatHudDate(point.date, small), x, y, metricWidth);
   drawHudMetric(ctx, "Files", String(point.changedFiles.length), x + metricWidth + columnGap, y, metricWidth);
   y += small ? 36 : 50;
-  drawHudMetric(ctx, "Delta", `+${point.additions} / -${point.deletions}`, x, y, metricWidth);
+  drawHudMetric(ctx, "Delta", small ? `+${point.additions}/-${point.deletions}` : `+${point.additions} / -${point.deletions}`, x, y, metricWidth);
   drawHudMetric(ctx, "Stars", formatStars(point.cumulativeStars), x + metricWidth + columnGap, y, metricWidth);
   y += small ? 38 : 56;
 
@@ -1135,7 +1327,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
       const activePoint = nearestTrendPoint(trend, progress) ?? trend[0];
 
       drawBackground(ctx, width, height, tempo, palette);
-      drawAxes(ctx, layout, trend, palette, scales);
+      drawAxes(ctx, layout, palette, scales);
       drawStarTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle, scales);
       drawTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle, scales);
       drawHud(ctx, layout, movie, activePoint, selectedFile, progress, tempo, palette, avatarImagesRef.current);

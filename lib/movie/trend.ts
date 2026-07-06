@@ -40,6 +40,10 @@ export type DynamicTrendScales = {
   starMax: number;
   finalCommitMax: number;
   finalStarMax: number;
+  timeStart: number;
+  timeEnd: number;
+  finalTimeStart: number;
+  finalTimeEnd: number;
 };
 
 function toTimestamp(date: string, fallback: number) {
@@ -62,6 +66,19 @@ function dynamicAxisMax(activeValue: number, finalMax: number, padding: number, 
 
   const paddedActiveValue = Math.max(minimumVisible, activeValue * padding);
   return Math.min(finalMax, paddedActiveValue);
+}
+
+function dynamicTimeEnd(timeStart: number, finalTimeEnd: number, activeTimestamp: number) {
+  const finalSpan = Math.max(0, finalTimeEnd - timeStart);
+  if (finalSpan <= 0) {
+    return finalTimeEnd;
+  }
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const activeSpan = Math.max(0, activeTimestamp - timeStart);
+  const minimumVisibleSpan = Math.min(finalSpan, Math.max(oneDayMs, finalSpan * 0.04));
+  const visibleSpan = Math.min(finalSpan, Math.max(minimumVisibleSpan, activeSpan * 1.22));
+  return timeStart + visibleSpan;
 }
 
 export function buildCommitTrend(movie: RepoMovie): CommitTrendPoint[] {
@@ -168,18 +185,26 @@ export function nearestTrendPoint(points: CommitTrendPoint[], progress: number):
 
 export function buildDynamicTrendScales(points: CommitTrendPoint[], progress: number): DynamicTrendScales {
   const finalCommitMax = Math.max(1, points.length);
-  const finalStarMax = Math.max(0, ...points.map((point) => point.cumulativeStars));
+  const finalStarMax = Math.max(0, points[points.length - 1]?.cumulativeStars ?? 0);
+  const finalTimeStart = points[0]?.timestamp ?? 0;
+  const finalTimeEnd = points[points.length - 1]?.timestamp ?? finalTimeStart;
   const interpolated = interpolateTrendPoint(points, progress);
   const activeCommits = interpolated?.cumulativeCommits ?? finalCommitMax;
   const activeStars = interpolated?.cumulativeStars ?? finalStarMax;
+  const activeTimestamp = interpolated?.timestamp ?? finalTimeEnd;
 
   const commitMax = dynamicAxisMax(activeCommits, finalCommitMax, 1.32, 4);
   const starMax = dynamicAxisMax(activeStars, finalStarMax, 1.38, 4);
+  const timeEnd = dynamicTimeEnd(finalTimeStart, finalTimeEnd, activeTimestamp);
 
   return {
     commitMax: Math.max(1, commitMax),
     starMax: Math.max(0, starMax),
     finalCommitMax,
-    finalStarMax
+    finalStarMax,
+    timeStart: finalTimeStart,
+    timeEnd,
+    finalTimeStart,
+    finalTimeEnd
   };
 }

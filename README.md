@@ -19,7 +19,8 @@ Repo Movie Machine is a compact creative developer tool that turns a public GitH
   - left y-axis cumulative commit count
   - right y-axis estimated star count
   - continuously moving curve reveal
-  - adaptive chart scaling so early growth remains visible on long histories
+  - adaptive x/y chart scaling so early growth remains visible on long histories
+  - live curve-head label with commit number, date, message, and stars
   - estimated star trend mapped from the repository's current GitHub star total
   - in-canvas author, date, stars, SHA, file count, and delta HUD
   - language colors and file inspection context
