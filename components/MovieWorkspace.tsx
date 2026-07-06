@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import type { AnalysisJob } from "@/lib/jobs/job-types";
 import type { RepoMovie } from "@/lib/movie/repo-movie-types";
 import { sampleMovie } from "@/lib/movie/sample-data";
+import { DEFAULT_COMMIT_LIMIT } from "@/lib/security/limits";
 import { ExampleGallery } from "./ExampleGallery";
 import { JobStatus } from "./JobStatus";
 import { MoviePlayer } from "./MoviePlayer";
@@ -27,7 +28,7 @@ export function MovieWorkspace() {
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
 
-  const startJob = useCallback(async (repo: string, commitLimit = 60) => {
+  const startJob = useCallback(async (repo: string, commitLimit = DEFAULT_COMMIT_LIMIT) => {
     setLoading(true);
     setError(undefined);
     setMovie(undefined);
@@ -49,7 +50,7 @@ export function MovieWorkspace() {
   useEffect(() => {
     if (initialRepo && !autoStarted.current) {
       autoStarted.current = true;
-      void startJob(initialRepo, 60);
+      void startJob(initialRepo, DEFAULT_COMMIT_LIMIT);
     }
   }, [initialRepo, startJob]);
 

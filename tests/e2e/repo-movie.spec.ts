@@ -40,7 +40,7 @@ async function mockMovieApi(page: Page, jobId: string) {
     const body = route.request().postDataJSON() as { repo?: string; commitLimit?: number };
     expect(body).toMatchObject({
       repo: "octocat/Hello-World",
-      commitLimit: 60
+      commitLimit: 100
     });
 
     await route.fulfill({

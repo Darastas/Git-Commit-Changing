@@ -35,6 +35,7 @@ type GitHubCommitListResponse = Array<{
 }>;
 
 const GITHUB_API_BASE = "https://api.github.com";
+const GITHUB_MAX_PAGE_SIZE = 100;
 
 export class GitHubClientError extends Error {
   readonly details: GitHubApiError;
@@ -166,9 +167,21 @@ export class GitHubClient {
     branch: string,
     limit: number
   ): Promise<GitHubCommitDetail[]> {
-    const commits = await this.request<GitHubCommitListResponse>(
-      `/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${limit}`
-    );
+    const commits: GitHubCommitListResponse = [];
+    let page = 1;
+
+    while (commits.length < limit) {
+      const perPage = Math.min(GITHUB_MAX_PAGE_SIZE, limit - commits.length);
+      const pageCommits = await this.request<GitHubCommitListResponse>(
+        `/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${perPage}&page=${page}`
+      );
+
+      commits.push(...pageCommits);
+      if (pageCommits.length < perPage) {
+        break;
+      }
+      page += 1;
+    }
 
     if (commits.length === 0) {
       throw new GitHubClientError({

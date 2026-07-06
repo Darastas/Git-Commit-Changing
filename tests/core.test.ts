@@ -172,6 +172,44 @@ describe("mapGitHubError", () => {
     expect(commits[0].files).toBeUndefined();
   });
 
+  it("paginates summary commits when the requested limit exceeds GitHub's page size", async () => {
+    const calls: string[] = [];
+    const client = new GitHubClient({
+      fetchImpl: async (input) => {
+        calls.push(String(input));
+        const page = Number(new URL(String(input)).searchParams.get("page") ?? "1");
+        const perPage = Number(new URL(String(input)).searchParams.get("per_page") ?? "100");
+        return Response.json(
+          Array.from({ length: perPage }, (_, index) => {
+            const number = (page - 1) * 100 + index + 1;
+            return {
+              sha: `commit-${number}`,
+              commit: {
+                message: `Commit ${number}`,
+                author: { name: "Ada", date: `2024-01-${String((number % 28) + 1).padStart(2, "0")}T00:00:00Z` }
+              },
+              author: {
+                login: "ada",
+                avatar_url: "https://example.com/ada.png"
+              }
+            };
+          })
+        );
+      }
+    });
+
+    const commits = await client.getCommitSummaries("octocat", "Hello-World", "main", 250);
+
+    expect(commits).toHaveLength(250);
+    expect(calls).toHaveLength(3);
+    expect(calls[0]).toContain("per_page=100");
+    expect(calls[0]).toContain("page=1");
+    expect(calls[1]).toContain("per_page=100");
+    expect(calls[1]).toContain("page=2");
+    expect(calls[2]).toContain("per_page=50");
+    expect(calls[2]).toContain("page=3");
+  });
+
   it("maps rate-limit responses to a retryable user-facing error", () => {
     const mapped = mapGitHubError(
       new Response("rate limited", {

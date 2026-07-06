@@ -47,12 +47,13 @@ describe("InMemoryMovieStorage", () => {
 });
 
 describe("normalizeCommitLimit", () => {
-  it("allows only supported commit limits and defaults to 60", () => {
-    expect(normalizeCommitLimit(undefined)).toBe(60);
+  it("allows expanded commit limits and defaults to 100", () => {
+    expect(normalizeCommitLimit(undefined)).toBe(100);
     expect(normalizeCommitLimit(30)).toBe(30);
-    expect(normalizeCommitLimit(60)).toBe(60);
     expect(normalizeCommitLimit(100)).toBe(100);
-    expect(() => normalizeCommitLimit(10)).toThrow(/30, 60, or 100/);
+    expect(normalizeCommitLimit(250)).toBe(250);
+    expect(normalizeCommitLimit(500)).toBe(500);
+    expect(() => normalizeCommitLimit(10)).toThrow(/30, 100, 250, or 500/);
   });
 });
 
