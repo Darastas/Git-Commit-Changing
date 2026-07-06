@@ -36,6 +36,9 @@ type ChartPoint = {
   source: CommitTrendPoint;
 };
 
+const CANVAS_MIN_RENDER_SCALE = 2;
+const CANVAS_MAX_RENDER_SCALE = 3;
+
 const canvasFallbackBackground = {
   backgroundColor: "#090b0a",
   backgroundImage: [
@@ -50,6 +53,10 @@ const canvasFallbackBackground = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function getCanvasRenderScale() {
+  return clamp(window.devicePixelRatio || 1, CANVAS_MIN_RENDER_SCALE, CANVAS_MAX_RENDER_SCALE);
 }
 
 function formatAxisDate(date: string) {
@@ -388,6 +395,13 @@ function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: Co
     ctx.lineTo(x, chart.y + chart.height);
     ctx.stroke();
     ctx.fillStyle = "rgba(214, 211, 209, 0.62)";
+    if (small && tick === 0) {
+      ctx.textAlign = "left";
+    } else if (small && tick === tickCount - 1) {
+      ctx.textAlign = "right";
+    } else {
+      ctx.textAlign = "center";
+    }
     ctx.fillText(formatAxisDate(points[index].date), x, chart.y + chart.height + 14);
   }
 
@@ -402,12 +416,14 @@ function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: Co
   ctx.textBaseline = "alphabetic";
   ctx.font = `700 ${small ? 10 : 12}px ui-monospace, monospace`;
   ctx.fillStyle = "rgba(245, 245, 244, 0.9)";
-  ctx.fillText("Cumulative commits", chart.x, chart.y - 18);
-  ctx.font = `${small ? 9 : 10}px ui-monospace, monospace`;
-  ctx.fillStyle = "rgba(214, 211, 209, 0.58)";
-  ctx.fillText("dates with commits", chart.x + (small ? 118 : 152), chart.y - 18);
+  ctx.fillText(small ? "Commits" : "Cumulative commits", chart.x, chart.y - 18);
+  if (!small) {
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.fillStyle = "rgba(214, 211, 209, 0.58)";
+    ctx.fillText("dates with commits", chart.x + 152, chart.y - 18);
+  }
   if (maxStars > 0) {
-    const legendX = chart.x + chart.width - (small ? 96 : 132);
+    const legendX = chart.x + chart.width - (small ? 60 : 132);
     ctx.strokeStyle = "rgba(56, 189, 248, 0.82)";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -771,9 +787,9 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
 
     function draw(now: number) {
       const rect = drawingCanvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      const nextWidth = Math.max(1, Math.floor(rect.width * dpr));
-      const nextHeight = Math.max(1, Math.floor(rect.height * dpr));
+      const renderScale = getCanvasRenderScale();
+      const nextWidth = Math.max(1, Math.ceil(rect.width * renderScale));
+      const nextHeight = Math.max(1, Math.ceil(rect.height * renderScale));
 
       if (drawingCanvas.width !== nextWidth || drawingCanvas.height !== nextHeight) {
         drawingCanvas.width = nextWidth;
@@ -785,7 +801,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
       const height = rect.height;
       const tempo = now / 1000;
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
       ctx.clearRect(0, 0, width, height);
 
       if (trend.length === 0) {
@@ -820,7 +836,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
   return (
     <canvas
       ref={canvasRef}
-      className="h-full min-h-[28rem] w-full rounded-[0.45rem] border border-stone-700/70 bg-stone-950 shadow-[0_18px_60px_rgba(0,0,0,0.42)]"
+      className="aspect-[16/9] min-h-[24rem] w-full rounded-[0.45rem] border border-stone-700/70 bg-stone-950 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:min-h-[28rem] lg:min-h-[30rem]"
       style={canvasFallbackBackground}
       onClick={(event) => {
         const canvas = canvasRef.current;

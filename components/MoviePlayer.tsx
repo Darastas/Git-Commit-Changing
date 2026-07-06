@@ -3,6 +3,7 @@
 import { Download, FileJson, Pause, Play, Share2, SkipBack, SkipForward, Video } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { RepoMovie } from "@/lib/movie/repo-movie-types";
+import { getPreferredWebMRecorderOptions, getWebMBlobType } from "@/lib/movie/recording";
 import { advanceTrendProgress } from "@/lib/movie/trend";
 import { CodeCityCanvas } from "./CodeCityCanvas";
 import { CommitPanel } from "./CommitPanel";
@@ -93,7 +94,10 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
 
     chunksRef.current = [];
     const stream = canvas.captureStream(30);
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+    const recorderOptions = getPreferredWebMRecorderOptions(
+      typeof MediaRecorder.isTypeSupported === "function" ? MediaRecorder.isTypeSupported.bind(MediaRecorder) : undefined
+    );
+    const recorder = new MediaRecorder(stream, recorderOptions);
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         chunksRef.current.push(event.data);
@@ -102,7 +106,10 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
     recorder.onstop = () => {
       setRecording(false);
       stream.getTracks().forEach((track) => track.stop());
-      downloadBlob(`${movie.repo.owner}-${movie.repo.name}-movie.webm`, new Blob(chunksRef.current, { type: "video/webm" }));
+      downloadBlob(
+        `${movie.repo.owner}-${movie.repo.name}-movie.webm`,
+        new Blob(chunksRef.current, { type: getWebMBlobType(recorderOptions) })
+      );
     };
     recorderRef.current = recorder;
     recorder.start();
@@ -261,7 +268,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               </button>
               <button
                 type="button"
-                title="Record WebM"
+                title="Record HD WebM"
                 className="inline-flex h-8 items-center gap-2 rounded-[0.35rem] border border-stone-700 bg-[#090b0a]/70 px-2.5 text-stone-200 hover:border-teal-300"
                 onClick={toggleRecording}
               >
