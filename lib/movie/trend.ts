@@ -35,6 +35,13 @@ export type ContinuousProgressInput = {
   durationMs: number;
 };
 
+export type DynamicTrendScales = {
+  commitMax: number;
+  starMax: number;
+  finalCommitMax: number;
+  finalStarMax: number;
+};
+
 function toTimestamp(date: string, fallback: number) {
   const timestamp = new Date(date).getTime();
   return Number.isFinite(timestamp) ? timestamp : fallback;
@@ -46,6 +53,15 @@ function clamp(value: number, min: number, max: number) {
 
 function lerp(from: number, to: number, progress: number) {
   return from + (to - from) * progress;
+}
+
+function dynamicAxisMax(activeValue: number, finalMax: number, padding: number, minimumVisible: number) {
+  if (finalMax <= 0) {
+    return 0;
+  }
+
+  const paddedActiveValue = Math.max(minimumVisible, activeValue * padding);
+  return Math.min(finalMax, paddedActiveValue);
 }
 
 export function buildCommitTrend(movie: RepoMovie): CommitTrendPoint[] {
@@ -148,4 +164,22 @@ export function nearestTrendPoint(points: CommitTrendPoint[], progress: number):
   const normalizedProgress = clamp(progress, 0, 1);
   const index = Math.min(points.length - 1, Math.max(0, Math.round(normalizedProgress * (points.length - 1))));
   return points[index];
+}
+
+export function buildDynamicTrendScales(points: CommitTrendPoint[], progress: number): DynamicTrendScales {
+  const finalCommitMax = Math.max(1, points.length);
+  const finalStarMax = Math.max(0, ...points.map((point) => point.cumulativeStars));
+  const interpolated = interpolateTrendPoint(points, progress);
+  const activeCommits = interpolated?.cumulativeCommits ?? finalCommitMax;
+  const activeStars = interpolated?.cumulativeStars ?? finalStarMax;
+
+  const commitMax = dynamicAxisMax(activeCommits, finalCommitMax, 1.32, 4);
+  const starMax = dynamicAxisMax(activeStars, finalStarMax, 1.38, 4);
+
+  return {
+    commitMax: Math.max(1, commitMax),
+    starMax: Math.max(0, starMax),
+    finalCommitMax,
+    finalStarMax
+  };
 }

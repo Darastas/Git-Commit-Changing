@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { GitHubCommitDetail, GitHubRepoMetadata } from "@/lib/github/github-types";
 import { buildRepoMovieFromGitHub } from "@/lib/movie/repo-parser";
-import { advanceTrendProgress, buildCommitTrend, interpolateTrendPoint, nearestTrendPoint } from "@/lib/movie/trend";
+import {
+  advanceTrendProgress,
+  buildCommitTrend,
+  buildDynamicTrendScales,
+  interpolateTrendPoint,
+  nearestTrendPoint
+} from "@/lib/movie/trend";
 import commitDetails from "./fixtures/github-commit-details.json";
 
 const repo: GitHubRepoMetadata = {
@@ -96,5 +102,29 @@ describe("buildCommitTrend", () => {
 
     expect(afterBoundary).toBeGreaterThan(beforeBoundary);
     expect(afterBoundary - beforeBoundary).toBeLessThan(0.01);
+  });
+
+  it("expands chart scales as the playback reaches larger history totals", () => {
+    const movie = buildRepoMovieFromGitHub({
+      repo: { ...repo, stars: 5000 },
+      commitLimit: 30,
+      commits: Array.from({ length: 40 }, (_, index) => ({
+        sha: `scale-${index}`,
+        commit: {
+          message: `Scale commit ${index}`,
+          author: { name: "Ada", date: `2024-01-${String((index % 28) + 1).padStart(2, "0")}T00:00:00Z` }
+        },
+        author: { login: "ada", avatar_url: "https://example.com/ada.png" }
+      }))
+    });
+
+    const trend = buildCommitTrend(movie);
+    const early = buildDynamicTrendScales(trend, 0.02);
+    const late = buildDynamicTrendScales(trend, 0.8);
+
+    expect(early.commitMax).toBeLessThan(late.commitMax);
+    expect(early.starMax).toBeLessThan(late.starMax);
+    expect(late.finalCommitMax).toBe(40);
+    expect(late.finalStarMax).toBe(5000);
   });
 });

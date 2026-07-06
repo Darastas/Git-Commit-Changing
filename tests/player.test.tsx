@@ -15,6 +15,7 @@ beforeAll(() => {
     beginPath: () => undefined,
     closePath: () => undefined,
     roundRect: () => undefined,
+    rect: () => undefined,
     arc: () => undefined,
     ellipse: () => undefined,
     measureText: (text: string) => ({ width: text.length * 7 }),

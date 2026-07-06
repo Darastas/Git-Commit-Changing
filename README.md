@@ -13,11 +13,13 @@ Repo Movie Machine is a compact creative developer tool that turns a public GitH
 - Low-rate summary mode when `GITHUB_TOKEN` is not set, so unauthenticated runs do not fan out into one request per commit.
 - Async job abstraction with in-memory queue/store.
 - Movie cache keyed by provider, owner, repo, branch, latest SHA, and commit limit.
-- Commit limits: 30, 100, 250, 500. Default: 100.
+- Commit limits: 30, 100, 250, 500, or All. Default: 100.
 - 2D commit trend player:
   - x-axis dates with commits
-  - y-axis cumulative commit count
+  - left y-axis cumulative commit count
+  - right y-axis estimated star count
   - continuously moving curve reveal
+  - adaptive chart scaling so early growth remains visible on long histories
   - estimated star trend mapped from the repository's current GitHub star total
   - in-canvas author, date, stars, SHA, file count, and delta HUD
   - language colors and file inspection context
@@ -44,9 +46,9 @@ The app includes a sample movie, so the player works before a live repository is
 
 ## GitHub Token
 
-`GITHUB_TOKEN` is optional but recommended. Without it, GitHub's unauthenticated API rate limits are much lower, so the app uses summary mode: it fetches repository metadata and the commit list, then generates timeline activity files without per-file commit details. This keeps larger 250 or 500 commit movies usable on the low unauthenticated quota.
+`GITHUB_TOKEN` is optional but recommended. Without it, GitHub's unauthenticated API rate limits are much lower, so the app uses summary mode: it fetches repository metadata and the commit list, then generates timeline activity files without per-file commit details. This keeps larger 250, 500, or All commit movies usable on the low unauthenticated quota.
 
-With `GITHUB_TOKEN` set, the analyzer fetches per-commit file details server-side and produces richer commit and file metadata for the trend HUD. If the token is rate-limited during detail fetching, the job falls back to summary mode instead of failing the whole movie.
+With `GITHUB_TOKEN` set, the analyzer fetches per-commit file details server-side for finite limits up to 500 and produces richer commit and file metadata for the trend HUD. If the token is rate-limited during detail fetching, the job falls back to summary mode instead of failing the whole movie. The All option intentionally stays in summary mode so full-history timelines do not fan out into thousands of per-commit detail requests.
 
 Create `.env.local`:
 
@@ -144,7 +146,7 @@ Boundaries are intentionally separate: GitHub access, validation, job management
 - With `GITHUB_TOKEN`, commit details are fetched sequentially to stay simple and gentle on GitHub rate limits.
 - The analyzer uses recent GitHub API commits only; it does not clone full repository history.
 - Star history is currently estimated from the repository's current star count and commit timeline. Exact historical starring events require an additional GitHub stargazers timeline fetch.
-- Very large repositories should use the 30 or 100 commit setting first, then move up to 250 or 500 once the repo loads cleanly.
+- Very large repositories should use the 30 or 100 commit setting first, then move up to 250, 500, or All once the repo loads cleanly. All may require many GitHub commit-list pages on repositories with very long histories.
 - MP4 export is not included. WebM is browser-side only.
 
 ## Production Upgrade Roadmap

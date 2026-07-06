@@ -5,6 +5,7 @@ import { GitHubClient, mapGitHubError } from "@/lib/github/github-client";
 import { normalizeGitHubRepoInput } from "@/lib/github/github-url";
 import { inferLanguage } from "@/lib/movie/language";
 import { buildRepoMovieFromGitHub } from "@/lib/movie/repo-parser";
+import { ALL_COMMITS_LIMIT } from "@/lib/security/limits";
 import type { GitHubCommitDetail, GitHubRepoMetadata } from "@/lib/github/github-types";
 
 const repo: GitHubRepoMetadata = {
@@ -208,6 +209,41 @@ describe("mapGitHubError", () => {
     expect(calls[1]).toContain("page=2");
     expect(calls[2]).toContain("per_page=50");
     expect(calls[2]).toContain("page=3");
+  });
+
+  it("fetches all summary commit pages when All is requested", async () => {
+    const calls: string[] = [];
+    const client = new GitHubClient({
+      fetchImpl: async (input) => {
+        calls.push(String(input));
+        const page = Number(new URL(String(input)).searchParams.get("page") ?? "1");
+        const count = page === 1 ? 100 : 18;
+        return Response.json(
+          Array.from({ length: count }, (_, index) => {
+            const number = (page - 1) * 100 + index + 1;
+            return {
+              sha: `commit-${number}`,
+              commit: {
+                message: `Commit ${number}`,
+                author: { name: "Ada", date: "2024-01-01T00:00:00Z" }
+              },
+              author: {
+                login: "ada",
+                avatar_url: "https://example.com/ada.png"
+              }
+            };
+          })
+        );
+      }
+    });
+
+    const commits = await client.getCommitSummaries("octocat", "Hello-World", "main", ALL_COMMITS_LIMIT);
+
+    expect(commits).toHaveLength(118);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain("per_page=100");
+    expect(calls[1]).toContain("per_page=100");
+    expect(calls[1]).toContain("page=2");
   });
 
   it("maps rate-limit responses to a retryable user-facing error", () => {

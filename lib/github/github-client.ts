@@ -169,9 +169,10 @@ export class GitHubClient {
   ): Promise<GitHubCommitDetail[]> {
     const commits: GitHubCommitListResponse = [];
     let page = 1;
+    const fetchAllCommits = limit <= 0;
 
-    while (commits.length < limit) {
-      const perPage = Math.min(GITHUB_MAX_PAGE_SIZE, limit - commits.length);
+    while (fetchAllCommits || commits.length < limit) {
+      const perPage = fetchAllCommits ? GITHUB_MAX_PAGE_SIZE : Math.min(GITHUB_MAX_PAGE_SIZE, limit - commits.length);
       const pageCommits = await this.request<GitHubCommitListResponse>(
         `/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(branch)}&per_page=${perPage}&page=${page}`
       );
@@ -192,7 +193,8 @@ export class GitHubClient {
       });
     }
 
-    return commits.slice(0, limit).map((commit) => ({
+    const limitedCommits = fetchAllCommits ? commits : commits.slice(0, limit);
+    return limitedCommits.map((commit) => ({
       sha: commit.sha,
       commit: {
         message: commit.commit?.message ?? "(no commit message)",

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InMemoryJobStore, getJobStore } from "@/lib/jobs/in-memory-job-store";
 import { createAnalysisJob } from "@/lib/jobs/queue";
 import { InMemoryMovieStorage } from "@/lib/storage/in-memory-storage";
-import { enforceRequestCooldown, normalizeCommitLimit } from "@/lib/security/limits";
+import { ALL_COMMITS_LIMIT, enforceRequestCooldown, normalizeCommitLimit } from "@/lib/security/limits";
 import { analyzeJob } from "@/worker/analyze-job";
 
 describe("InMemoryJobStore", () => {
@@ -53,7 +53,8 @@ describe("normalizeCommitLimit", () => {
     expect(normalizeCommitLimit(100)).toBe(100);
     expect(normalizeCommitLimit(250)).toBe(250);
     expect(normalizeCommitLimit(500)).toBe(500);
-    expect(() => normalizeCommitLimit(10)).toThrow(/30, 100, 250, or 500/);
+    expect(normalizeCommitLimit(ALL_COMMITS_LIMIT)).toBe(ALL_COMMITS_LIMIT);
+    expect(() => normalizeCommitLimit(10)).toThrow(/30, 100, 250, 500, or All/);
   });
 });
 
@@ -352,6 +353,74 @@ describe("analyzeJob", () => {
       });
       expect(secondMovie).toBe(firstMovie);
       expect(calls.filter((url) => url.includes("/repos/octocat/cache-lab/commits?"))).toHaveLength(1);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("uses full summary history for All without per-commit detail fan-out", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+
+    vi.stubEnv("GITHUB_TOKEN", "test-token");
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+
+      if (url.endsWith("/repos/octocat/full-history-lab")) {
+        return Response.json({
+          owner: { login: "octocat" },
+          name: "full-history-lab",
+          full_name: "octocat/full-history-lab",
+          html_url: "https://github.com/octocat/full-history-lab",
+          default_branch: "main",
+          description: "Full history fixture",
+          stargazers_count: 1234,
+          language: "TypeScript",
+          archived: false
+        });
+      }
+
+      if (url.endsWith("/repos/octocat/full-history-lab/branches/main")) {
+        return Response.json({ commit: { sha: "full-latest" } });
+      }
+
+      if (url.includes("/repos/octocat/full-history-lab/commits?")) {
+        const page = Number(new URL(url).searchParams.get("page") ?? "1");
+        const count = page === 1 ? 100 : 27;
+        return Response.json(
+          Array.from({ length: count }, (_, index) => {
+            const number = (page - 1) * 100 + index + 1;
+            return {
+              sha: `full-${number}`,
+              commit: {
+                message: `Full commit ${number}`,
+                author: { name: "Ada", date: `2024-01-${String((number % 28) + 1).padStart(2, "0")}T00:00:00Z` }
+              },
+              author: { login: "ada", avatar_url: "https://example.com/ada.png" }
+            };
+          })
+        );
+      }
+
+      return new Response("unexpected request", { status: 500 });
+    });
+
+    try {
+      const job = await getJobStore().create({
+        repo: "octocat/full-history-lab",
+        normalizedRepo: "octocat/full-history-lab",
+        commitLimit: ALL_COMMITS_LIMIT
+      });
+
+      const movie = await analyzeJob(job.id);
+      const updatedJob = await getJobStore().get(job.id);
+
+      expect(updatedJob?.status).toBe("succeeded");
+      expect(movie?.commits).toHaveLength(127);
+      expect(calls.filter((url) => url.includes("/commits?"))).toHaveLength(2);
+      expect(calls.some((url) => /\/commits\/full-\d+/.test(url))).toBe(false);
     } finally {
       vi.stubGlobal("fetch", originalFetch);
       vi.unstubAllEnvs();

@@ -3,6 +3,7 @@ import { normalizeGitHubRepoInput } from "@/lib/github/github-url";
 import { buildMovieCacheKey } from "@/lib/jobs/cache-key";
 import { getJobStore } from "@/lib/jobs/in-memory-job-store";
 import { buildRepoMovieFromGitHub } from "@/lib/movie/repo-parser";
+import { ALL_COMMITS_LIMIT } from "@/lib/security/limits";
 import { getMovieStorage } from "@/lib/storage/in-memory-storage";
 
 function asJobError(error: unknown) {
@@ -35,6 +36,10 @@ function hasGitHubToken() {
 
 function canFallBackToCommitSummaries(error: unknown) {
   return error instanceof GitHubClientError && error.details.code === "github_rate_limited";
+}
+
+function shouldFetchCommitDetails(commitLimit: number) {
+  return hasGitHubToken() && commitLimit !== ALL_COMMITS_LIMIT && commitLimit <= 500;
 }
 
 export async function analyzeJob(jobId: string) {
@@ -94,7 +99,7 @@ export async function analyzeJob(jobId: string) {
     );
 
     let commits = commitSummaries;
-    if (hasGitHubToken()) {
+    if (shouldFetchCommitDetails(job.commitLimit)) {
       try {
         commits = await client.getCommitDetails(
           repo.owner,

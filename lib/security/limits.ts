@@ -1,4 +1,5 @@
-export const SUPPORTED_COMMIT_LIMITS = [30, 100, 250, 500] as const;
+export const ALL_COMMITS_LIMIT = 0;
+export const SUPPORTED_COMMIT_LIMITS = [30, 100, 250, 500, ALL_COMMITS_LIMIT] as const;
 export const DEFAULT_COMMIT_LIMIT = 100;
 export const REQUEST_COOLDOWN_MS = 10_000;
 
@@ -10,7 +11,7 @@ export function normalizeCommitLimit(value: unknown): SupportedCommitLimit {
     return numeric as SupportedCommitLimit;
   }
 
-  throw new Error("Commit limit must be 30, 100, 250, or 500.");
+  throw new Error("Commit limit must be 30, 100, 250, 500, or All.");
 }
 
 export function enforceRequestCooldown(

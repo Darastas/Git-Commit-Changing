@@ -31,7 +31,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [speed, setSpeed] = useState(1);
   const [curveStyle, setCurveStyle] = useState<ChartCurveStyle>("smooth");
-  const [colorTheme, setColorTheme] = useState<ChartColorTheme>("aurora");
+  const [colorTheme, setColorTheme] = useState<ChartColorTheme>("geist");
   const [selectedPath, setSelectedPath] = useState<string | undefined>(() => Object.keys(movie.files)[0]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -206,9 +206,11 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               value={colorTheme}
               onChange={(event) => setColorTheme(event.target.value as ChartColorTheme)}
             >
-              <option value="aurora">Aurora</option>
-              <option value="ember">Ember</option>
-              <option value="lagoon">Lagoon</option>
+              <option value="geist">Geist</option>
+              <option value="primer">Primer</option>
+              <option value="linear">Linear</option>
+              <option value="mono">Mono</option>
+              <option value="sage">Sage</option>
             </select>
             </div>
           </div>

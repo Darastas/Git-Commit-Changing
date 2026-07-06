@@ -2,7 +2,7 @@
 
 import { Github, Loader2, Play } from "lucide-react";
 import { useState } from "react";
-import { DEFAULT_COMMIT_LIMIT, SUPPORTED_COMMIT_LIMITS } from "@/lib/security/limits";
+import { ALL_COMMITS_LIMIT, DEFAULT_COMMIT_LIMIT, SUPPORTED_COMMIT_LIMITS } from "@/lib/security/limits";
 
 type RepoInputProps = {
   onSubmit: (repo: string, commitLimit: number) => void;
@@ -38,7 +38,7 @@ export function RepoInput({ onSubmit, isLoading = false, initialRepo = "" }: Rep
           />
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_3rem] gap-2">
-          <div className="grid grid-cols-4 rounded-[0.4rem] border border-stone-700/80 bg-[#090b0a]/80 p-1">
+          <div className="grid grid-cols-5 rounded-[0.4rem] border border-stone-700/80 bg-[#090b0a]/80 p-1">
             {SUPPORTED_COMMIT_LIMITS.map((limit) => (
               <button
                 key={limit}
@@ -51,7 +51,7 @@ export function RepoInput({ onSubmit, isLoading = false, initialRepo = "" }: Rep
                 onClick={() => setCommitLimit(limit)}
                 disabled={isLoading}
               >
-                {limit}
+                {limit === ALL_COMMITS_LIMIT ? "All" : limit}
               </button>
             ))}
           </div>

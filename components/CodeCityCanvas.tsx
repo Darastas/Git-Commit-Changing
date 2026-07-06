@@ -3,8 +3,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import {
   buildCommitTrend,
+  buildDynamicTrendScales,
   interpolateTrendPoint,
   nearestTrendPoint,
+  type DynamicTrendScales,
   type CommitTrendPoint,
   type InterpolatedTrendPoint
 } from "@/lib/movie/trend";
@@ -41,7 +43,7 @@ type ChartPoint = {
 type ChangedFile = CommitTrendPoint["changedFiles"][number];
 
 export type ChartCurveStyle = "smooth" | "linear" | "dash";
-export type ChartColorTheme = "aurora" | "ember" | "lagoon";
+export type ChartColorTheme = "geist" | "primer" | "linear" | "mono" | "sage";
 
 type ChartPalette = {
   name: ChartColorTheme;
@@ -64,47 +66,75 @@ const CANVAS_FONT_SANS = 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkM
 const CANVAS_FONT_MONO = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
 
 const CHART_PALETTES: Record<ChartColorTheme, ChartPalette> = {
-  aurora: {
-    name: "aurora",
-    background: ["#070909", "#11130f", "#090708"],
-    ambient: ["rgba(20, 184, 166, 0.16)", "rgba(250, 204, 21, 0.055)", "rgba(244, 63, 94, 0)"],
-    commitStops: ["#14b8a6", "#facc15", "#fb7185"],
-    starStops: ["rgba(20, 184, 166, 0.34)", "rgba(56, 189, 248, 0.82)", "rgba(186, 230, 253, 0.74)"],
-    commitGlow: "#facc15",
-    starGlow: "#38bdf8",
-    cursor: "#fff7d6",
-    cursorHalo: "rgba(250, 204, 21, 0.34)",
-    progressStops: ["rgba(20, 184, 166, 0.42)", "rgba(250, 204, 21, 0.36)", "rgba(244, 63, 94, 0.32)"],
-    selectedFill: "rgba(20, 184, 166, 0.1)",
-    selectedStroke: "rgba(20, 184, 166, 0.24)"
-  },
-  ember: {
-    name: "ember",
-    background: ["#090807", "#17110c", "#0b0908"],
-    ambient: ["rgba(248, 113, 113, 0.14)", "rgba(251, 191, 36, 0.075)", "rgba(45, 212, 191, 0)"],
-    commitStops: ["#fb7185", "#f59e0b", "#fde68a"],
-    starStops: ["rgba(250, 204, 21, 0.28)", "rgba(251, 146, 60, 0.72)", "rgba(254, 215, 170, 0.74)"],
-    commitGlow: "#fb923c",
-    starGlow: "#f59e0b",
-    cursor: "#fff7ed",
-    cursorHalo: "rgba(251, 146, 60, 0.34)",
-    progressStops: ["rgba(251, 113, 133, 0.4)", "rgba(245, 158, 11, 0.34)", "rgba(254, 240, 138, 0.25)"],
-    selectedFill: "rgba(251, 146, 60, 0.11)",
-    selectedStroke: "rgba(251, 146, 60, 0.28)"
-  },
-  lagoon: {
-    name: "lagoon",
-    background: ["#06100f", "#0b1617", "#071013"],
-    ambient: ["rgba(45, 212, 191, 0.14)", "rgba(56, 189, 248, 0.07)", "rgba(129, 140, 248, 0)"],
-    commitStops: ["#2dd4bf", "#38bdf8", "#a78bfa"],
-    starStops: ["rgba(34, 211, 238, 0.28)", "rgba(96, 165, 250, 0.82)", "rgba(196, 181, 253, 0.72)"],
-    commitGlow: "#38bdf8",
+  geist: {
+    name: "geist",
+    background: ["#050505", "#0a0a0a", "#111111"],
+    ambient: ["rgba(255, 255, 255, 0.08)", "rgba(59, 130, 246, 0.055)", "rgba(255, 255, 255, 0)"],
+    commitStops: ["#f5f5f5", "#93c5fd", "#a1a1aa"],
+    starStops: ["rgba(148, 163, 184, 0.32)", "rgba(129, 140, 248, 0.72)", "rgba(226, 232, 240, 0.66)"],
+    commitGlow: "#93c5fd",
     starGlow: "#818cf8",
-    cursor: "#ecfeff",
-    cursorHalo: "rgba(56, 189, 248, 0.32)",
-    progressStops: ["rgba(45, 212, 191, 0.38)", "rgba(56, 189, 248, 0.34)", "rgba(167, 139, 250, 0.3)"],
-    selectedFill: "rgba(56, 189, 248, 0.1)",
-    selectedStroke: "rgba(56, 189, 248, 0.28)"
+    cursor: "#ffffff",
+    cursorHalo: "rgba(147, 197, 253, 0.24)",
+    progressStops: ["rgba(245, 245, 245, 0.34)", "rgba(147, 197, 253, 0.28)", "rgba(161, 161, 170, 0.26)"],
+    selectedFill: "rgba(147, 197, 253, 0.1)",
+    selectedStroke: "rgba(147, 197, 253, 0.26)"
+  },
+  primer: {
+    name: "primer",
+    background: ["#0d1117", "#111820", "#0b0f14"],
+    ambient: ["rgba(88, 166, 255, 0.1)", "rgba(63, 185, 80, 0.055)", "rgba(210, 153, 34, 0)"],
+    commitStops: ["#7ee787", "#58a6ff", "#c9d1d9"],
+    starStops: ["rgba(88, 166, 255, 0.28)", "rgba(210, 153, 34, 0.7)", "rgba(201, 209, 217, 0.68)"],
+    commitGlow: "#58a6ff",
+    starGlow: "#d29922",
+    cursor: "#f0f6fc",
+    cursorHalo: "rgba(88, 166, 255, 0.24)",
+    progressStops: ["rgba(126, 231, 135, 0.34)", "rgba(88, 166, 255, 0.28)", "rgba(201, 209, 217, 0.2)"],
+    selectedFill: "rgba(88, 166, 255, 0.1)",
+    selectedStroke: "rgba(88, 166, 255, 0.26)"
+  },
+  linear: {
+    name: "linear",
+    background: ["#09090b", "#111116", "#0c0c10"],
+    ambient: ["rgba(94, 106, 210, 0.11)", "rgba(203, 213, 225, 0.045)", "rgba(244, 244, 245, 0)"],
+    commitStops: ["#e4e4e7", "#9ca3ff", "#94a3b8"],
+    starStops: ["rgba(148, 163, 184, 0.28)", "rgba(196, 181, 253, 0.66)", "rgba(226, 232, 240, 0.64)"],
+    commitGlow: "#9ca3ff",
+    starGlow: "#c4b5fd",
+    cursor: "#fafafa",
+    cursorHalo: "rgba(156, 163, 255, 0.24)",
+    progressStops: ["rgba(228, 228, 231, 0.32)", "rgba(156, 163, 255, 0.28)", "rgba(148, 163, 184, 0.24)"],
+    selectedFill: "rgba(156, 163, 255, 0.1)",
+    selectedStroke: "rgba(156, 163, 255, 0.25)"
+  },
+  mono: {
+    name: "mono",
+    background: ["#080808", "#0f0f0f", "#090909"],
+    ambient: ["rgba(250, 250, 250, 0.075)", "rgba(115, 115, 115, 0.04)", "rgba(250, 250, 250, 0)"],
+    commitStops: ["#fafafa", "#d4d4d4", "#737373"],
+    starStops: ["rgba(163, 163, 163, 0.26)", "rgba(212, 212, 212, 0.62)", "rgba(245, 245, 245, 0.58)"],
+    commitGlow: "#d4d4d4",
+    starGlow: "#a3a3a3",
+    cursor: "#ffffff",
+    cursorHalo: "rgba(212, 212, 212, 0.2)",
+    progressStops: ["rgba(250, 250, 250, 0.3)", "rgba(212, 212, 212, 0.24)", "rgba(115, 115, 115, 0.22)"],
+    selectedFill: "rgba(245, 245, 245, 0.08)",
+    selectedStroke: "rgba(245, 245, 245, 0.2)"
+  },
+  sage: {
+    name: "sage",
+    background: ["#080b0a", "#101412", "#090c0b"],
+    ambient: ["rgba(134, 239, 172, 0.085)", "rgba(186, 230, 253, 0.045)", "rgba(244, 114, 182, 0)"],
+    commitStops: ["#d9f99d", "#86efac", "#bae6fd"],
+    starStops: ["rgba(186, 230, 253, 0.26)", "rgba(134, 239, 172, 0.6)", "rgba(229, 231, 235, 0.62)"],
+    commitGlow: "#86efac",
+    starGlow: "#bae6fd",
+    cursor: "#f7fee7",
+    cursorHalo: "rgba(134, 239, 172, 0.22)",
+    progressStops: ["rgba(217, 249, 157, 0.28)", "rgba(134, 239, 172, 0.26)", "rgba(186, 230, 253, 0.22)"],
+    selectedFill: "rgba(134, 239, 172, 0.09)",
+    selectedStroke: "rgba(134, 239, 172, 0.24)"
   }
 };
 
@@ -224,7 +254,7 @@ function wrapText(
 function calculateLayout(width: number, height: number): ChartLayout {
   const small = width < 620;
   const margin = small ? 14 : 24;
-  const gap = small ? 10 : 18;
+  const gap = small ? 10 : 54;
   const chartLeft = small ? 36 : 64;
   const chartTop = small ? 36 : 52;
   const chartBottom = height - (small ? 52 : 70);
@@ -270,25 +300,23 @@ function pointX(point: CommitTrendPoint, points: CommitTrendPoint[], chart: Rect
   return chart.x + ((point.timestamp - minTimestamp) / (maxTimestamp - minTimestamp)) * chart.width;
 }
 
-function pointY(cumulativeCommits: number, maxCommits: number, chart: Rect) {
-  const normalized = cumulativeCommits / Math.max(1, maxCommits);
+function pointY(value: number, maxValue: number, chart: Rect) {
+  const normalized = value / Math.max(1, maxValue);
   return chart.y + chart.height - normalized * chart.height;
 }
 
-function buildChartPoints(points: CommitTrendPoint[], chart: Rect): ChartPoint[] {
-  const maxCommits = Math.max(1, points.length);
+function buildChartPoints(points: CommitTrendPoint[], chart: Rect, scales: DynamicTrendScales): ChartPoint[] {
   return points.map((point, index) => ({
     x: pointX(point, points, chart, index),
-    y: pointY(point.cumulativeCommits, maxCommits, chart),
+    y: pointY(point.cumulativeCommits, scales.commitMax, chart),
     source: point
   }));
 }
 
-function buildStarChartPoints(points: CommitTrendPoint[], chart: Rect): ChartPoint[] {
-  const maxStars = Math.max(1, ...points.map((point) => point.cumulativeStars));
+function buildStarChartPoints(points: CommitTrendPoint[], chart: Rect, scales: DynamicTrendScales): ChartPoint[] {
   return points.map((point, index) => ({
     x: pointX(point, points, chart, index),
-    y: pointY(point.cumulativeStars, maxStars, chart),
+    y: pointY(point.cumulativeStars, Math.max(1, scales.starMax), chart),
     source: point
   }));
 }
@@ -444,10 +472,16 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
   ctx.restore();
 }
 
-function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: CommitTrendPoint[], palette: ChartPalette) {
+function drawAxes(
+  ctx: CanvasRenderingContext2D,
+  layout: ChartLayout,
+  points: CommitTrendPoint[],
+  palette: ChartPalette,
+  scales: DynamicTrendScales
+) {
   const { chart, small } = layout;
-  const maxCommits = Math.max(1, points.length);
-  const maxStars = Math.max(0, ...points.map((point) => point.cumulativeStars));
+  const maxCommits = scales.commitMax;
+  const maxStars = scales.starMax;
 
   ctx.save();
   ctx.fillStyle = "rgba(7, 9, 9, 0.34)";
@@ -471,6 +505,24 @@ function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: Co
     ctx.lineTo(chart.x + chart.width, y);
     ctx.stroke();
     ctx.fillText(String(value), chart.x - 10, y);
+  }
+
+  if (maxStars > 0) {
+    ctx.textAlign = small ? "right" : "left";
+    ctx.fillStyle = palette.starStops[2];
+    for (let tick = 0; tick <= yTicks; tick += 1) {
+      const value = (maxStars / yTicks) * tick;
+      const y = chart.y + chart.height - (tick / yTicks) * chart.height;
+      ctx.fillText(formatStars(value), small ? chart.x + chart.width - 5 : chart.x + chart.width + 10, y);
+    }
+
+    ctx.strokeStyle = palette.starStops[1];
+    ctx.globalAlpha = 0.52;
+    ctx.beginPath();
+    ctx.moveTo(chart.x + chart.width, chart.y);
+    ctx.lineTo(chart.x + chart.width, chart.y + chart.height);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
   ctx.textAlign = "center";
@@ -526,7 +578,7 @@ function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: Co
     ctx.lineTo(legendX + 20, chart.y - 21);
     ctx.stroke();
     ctx.fillStyle = palette.starStops[2];
-    ctx.fillText(small ? "stars" : `estimated stars ${formatStars(maxStars)}`, legendX + 26, chart.y - 18);
+    ctx.fillText(small ? "stars" : `stars scale ${formatStars(maxStars)}`, legendX + 26, chart.y - 18);
   }
   ctx.restore();
 }
@@ -538,10 +590,11 @@ function drawTrendCurve(
   progress: number,
   tempo: number,
   palette: ChartPalette,
-  curveStyle: ChartCurveStyle
+  curveStyle: ChartCurveStyle,
+  scales: DynamicTrendScales
 ) {
   const { chart } = layout;
-  const coordinates = buildChartPoints(points, chart);
+  const coordinates = buildChartPoints(points, chart, scales);
   const interpolated = interpolateTrendPoint(points, progress);
   if (!interpolated) {
     return undefined;
@@ -556,6 +609,9 @@ function drawTrendCurve(
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.rect(chart.x, chart.y, chart.width, chart.height);
+  ctx.clip();
   if (curveStyle === "dash") {
     ctx.setLineDash([9, 11]);
   }
@@ -604,13 +660,18 @@ function drawTrendCurve(
     ctx.stroke();
   }
 
+  const commitMarkerStride = Math.max(1, Math.ceil(coordinates.length / 180));
   coordinates.forEach((point, index) => {
+    const markerStride = commitMarkerStride;
+    if (index % markerStride !== 0 && index !== coordinates.length - 1 && index !== interpolated.segmentIndex) {
+      return;
+    }
     const reached = index <= interpolated.segmentIndex || point.x <= cursor.x;
     ctx.beginPath();
     ctx.arc(point.x, point.y, reached ? 4.2 : 3, 0, Math.PI * 2);
     ctx.fillStyle = reached ? "rgba(255, 251, 235, 0.92)" : "rgba(168, 162, 158, 0.34)";
     ctx.fill();
-    ctx.strokeStyle = reached ? "rgba(250, 204, 21, 0.68)" : "rgba(231, 229, 228, 0.16)";
+    ctx.strokeStyle = reached ? palette.commitGlow : "rgba(231, 229, 228, 0.16)";
     ctx.stroke();
   });
 
@@ -662,15 +723,16 @@ function drawStarTrendCurve(
   progress: number,
   tempo: number,
   palette: ChartPalette,
-  curveStyle: ChartCurveStyle
+  curveStyle: ChartCurveStyle,
+  scales: DynamicTrendScales
 ) {
-  const totalStars = Math.max(0, ...points.map((point) => point.cumulativeStars));
+  const totalStars = scales.finalStarMax;
   if (totalStars <= 0) {
     return;
   }
 
   const { chart } = layout;
-  const coordinates = buildStarChartPoints(points, chart);
+  const coordinates = buildStarChartPoints(points, chart, scales);
   const interpolated = interpolateTrendPoint(points, progress);
   if (!interpolated) {
     return;
@@ -686,6 +748,9 @@ function drawStarTrendCurve(
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.rect(chart.x, chart.y, chart.width, chart.height);
+  ctx.clip();
   if (curveStyle === "dash") {
     ctx.setLineDash([7, 8]);
   }
@@ -713,7 +778,12 @@ function drawStarTrendCurve(
   ctx.setLineDash([]);
 
   ctx.shadowBlur = 0;
+  const starMarkerStride = Math.max(1, Math.ceil(coordinates.length / 140));
   coordinates.forEach((point, index) => {
+    const markerStride = starMarkerStride;
+    if (index % markerStride !== 0 && index !== coordinates.length - 1 && index !== interpolated.segmentIndex) {
+      return;
+    }
     const reached = index <= interpolated.segmentIndex || point.x <= cursor.x;
     ctx.fillStyle = reached ? "rgba(186, 230, 253, 0.86)" : "rgba(125, 211, 252, 0.24)";
     drawCanvasStar(ctx, point.x, point.y, reached ? 4.2 : 3.2);
@@ -984,7 +1054,7 @@ function drawHud(
 }
 
 function drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  drawBackground(ctx, width, height, 0, CHART_PALETTES.aurora);
+  drawBackground(ctx, width, height, 0, CHART_PALETTES.geist);
   ctx.save();
   ctx.fillStyle = "rgba(245, 245, 244, 0.86)";
   ctx.font = `800 16px ${CANVAS_FONT_SANS}`;
@@ -1061,12 +1131,13 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
 
       const layout = calculateLayout(width, height);
       const progress = trend.length <= 1 ? 1 : clamp(playheadProgress, 0, 1);
+      const scales = buildDynamicTrendScales(trend, progress);
       const activePoint = nearestTrendPoint(trend, progress) ?? trend[0];
 
       drawBackground(ctx, width, height, tempo, palette);
-      drawAxes(ctx, layout, trend, palette);
-      drawStarTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle);
-      drawTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle);
+      drawAxes(ctx, layout, trend, palette, scales);
+      drawStarTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle, scales);
+      drawTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle, scales);
       drawHud(ctx, layout, movie, activePoint, selectedFile, progress, tempo, palette, avatarImagesRef.current);
 
       ctx.save();
