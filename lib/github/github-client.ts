@@ -162,14 +162,26 @@ export class GitHubClient {
   }
 
   private async request<T>(path: string): Promise<T> {
-    const response = await this.fetchImpl(`${GITHUB_API_BASE}${path}`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {})
-      },
-      cache: "no-store"
-    });
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${GITHUB_API_BASE}${path}`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {})
+        },
+        cache: "no-store"
+      });
+    } catch (error) {
+      throw new GitHubClientError({
+        code: "github_network_error",
+        message:
+          error instanceof Error
+            ? `Could not reach GitHub API: ${error.message}. Check network, proxy, or deployment egress settings.`
+            : "Could not reach GitHub API. Check network, proxy, or deployment egress settings.",
+        retryable: true
+      });
+    }
 
     if (!response.ok) {
       throw new GitHubClientError(mapGitHubError(response));

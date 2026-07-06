@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import commitDetails from "./fixtures/github-commit-details.json";
 import { buildMovieCacheKey } from "@/lib/jobs/cache-key";
-import { mapGitHubError } from "@/lib/github/github-client";
+import { GitHubClient, mapGitHubError } from "@/lib/github/github-client";
 import { normalizeGitHubRepoInput } from "@/lib/github/github-url";
 import { inferLanguage } from "@/lib/movie/language";
 import { buildRepoMovieFromGitHub } from "@/lib/movie/repo-parser";
@@ -115,6 +115,21 @@ describe("mapGitHubError", () => {
     expect(mapGitHubError(new Response("missing", { status: 404 }))).toMatchObject({
       code: "repo_not_found",
       retryable: false
+    });
+  });
+
+  it("maps thrown fetch failures to a retryable GitHub network error", async () => {
+    const client = new GitHubClient({
+      fetchImpl: async () => {
+        throw new TypeError("fetch failed");
+      }
+    });
+
+    await expect(client.getRepository("octocat", "Hello-World")).rejects.toMatchObject({
+      details: {
+        code: "github_network_error",
+        retryable: true
+      }
     });
   });
 });
