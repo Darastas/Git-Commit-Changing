@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { MoviePlayer } from "@/components/MoviePlayer";
 import { sampleMovie } from "@/lib/movie/sample-data";
 
@@ -37,5 +37,19 @@ describe("MoviePlayer", () => {
     expect(screen.getByText("PNG")).toBeTruthy();
     expect(screen.getByText("WebM")).toBeTruthy();
     expect(screen.getByText("Bootstrap interface shell")).toBeTruthy();
+  });
+
+  it("confirms when the share URL has been copied", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: { writeText }
+    });
+
+    render(<MoviePlayer movie={sampleMovie} jobId="job-123" />);
+
+    fireEvent.click(screen.getByText("Share"));
+
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/movie/job-123");
+    expect(await screen.findByText("Copied")).toBeTruthy();
   });
 });
