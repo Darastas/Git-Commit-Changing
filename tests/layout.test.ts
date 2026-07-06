@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildCodeCityLayout } from "@/lib/movie/layout";
-import { buildRepoMovieFromGitHub } from "@/lib/movie/repo-parser";
 import type { GitHubCommitDetail, GitHubRepoMetadata } from "@/lib/github/github-types";
+import { buildRepoMovieFromGitHub } from "@/lib/movie/repo-parser";
+import { buildCommitTrend, interpolateTrendPoint, nearestTrendPoint } from "@/lib/movie/trend";
 import commitDetails from "./fixtures/github-commit-details.json";
 
 const repo: GitHubRepoMetadata = {
@@ -17,39 +17,49 @@ const repo: GitHubRepoMetadata = {
   archived: false
 };
 
-describe("buildCodeCityLayout", () => {
-  it("groups active files into directory districts with stable building rectangles", () => {
+describe("buildCommitTrend", () => {
+  it("sorts commits by authored date and assigns cumulative counts", () => {
     const movie = buildRepoMovieFromGitHub({
       repo,
       commitLimit: 30,
       commits: commitDetails as GitHubCommitDetail[]
     });
 
-    const layout = buildCodeCityLayout(movie, 1000, 600);
+    const trend = buildCommitTrend(movie);
 
-    expect(layout.districts.map((district) => district.path)).toContain("src");
-    expect(layout.districts.map((district) => district.path)).toContain("src/render");
-    expect(layout.buildings.map((building) => building.path)).toContain("src/parser.ts");
-    expect(layout.buildings.every((building) => building.width >= 16)).toBe(true);
-    expect(layout.buildings.every((building) => building.height >= 24)).toBe(true);
-    expect(layout.buildings.find((building) => building.path === "src/render/city.ts")?.height).toBeGreaterThan(
-      layout.buildings.find((building) => building.path === "README.md")?.height ?? 0
-    );
+    expect(trend.map((point) => point.commitSha)).toEqual(["aaaa1111", "bbbb2222"]);
+    expect(trend.map((point) => point.cumulativeCommits)).toEqual([1, 2]);
+    expect(trend[1].changedFiles.map((file) => file.path)).toContain("src/render/city.ts");
   });
 
-  it("assigns varied skyline shapes and constellation anchors", () => {
+  it("interpolates between commit points instead of snapping to a frame", () => {
     const movie = buildRepoMovieFromGitHub({
       repo,
       commitLimit: 30,
       commits: commitDetails as GitHubCommitDetail[]
     });
 
-    const layout = buildCodeCityLayout(movie, 1000, 600);
-    const visualStyles = new Set(layout.buildings.map((building) => building.visualStyle));
+    const trend = buildCommitTrend(movie);
+    const interpolated = interpolateTrendPoint(trend, 0.5);
 
-    expect(visualStyles.size).toBeGreaterThan(1);
-    expect(layout.buildings.every((building) => building.starX >= building.x)).toBe(true);
-    expect(layout.buildings.every((building) => building.starX <= building.x + building.width)).toBe(true);
-    expect(layout.buildings.every((building) => building.starY <= building.y + building.height)).toBe(true);
+    expect(interpolated?.left.commitSha).toBe("aaaa1111");
+    expect(interpolated?.right.commitSha).toBe("bbbb2222");
+    expect(interpolated?.segmentProgress).toBeCloseTo(0.5);
+    expect(interpolated?.cumulativeCommits).toBeCloseTo(1.5);
+    expect(interpolated?.timestamp).toBeGreaterThan(trend[0].timestamp);
+    expect(interpolated?.timestamp).toBeLessThan(trend[1].timestamp);
+  });
+
+  it("selects the nearest real commit for metadata display", () => {
+    const movie = buildRepoMovieFromGitHub({
+      repo,
+      commitLimit: 30,
+      commits: commitDetails as GitHubCommitDetail[]
+    });
+
+    const trend = buildCommitTrend(movie);
+
+    expect(nearestTrendPoint(trend, 0.1)?.commitSha).toBe("aaaa1111");
+    expect(nearestTrendPoint(trend, 0.9)?.commitSha).toBe("bbbb2222");
   });
 });

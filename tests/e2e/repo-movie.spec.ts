@@ -100,7 +100,7 @@ test("loads a mocked repo movie from the query parameter and exercises playback 
   await expect(page.getByRole("heading", { name: "octocat/Hello-World" })).toBeVisible();
   await expect(page.getByText("@mina")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Commit trail" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Jump to commit 3: Render code city timeline/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Jump to commit 3: Draw commit trend timeline/ })).toBeVisible();
   await expect.poll(() => canvasHasContent(page)).toBe(true);
 
   await page.getByRole("button", { name: "Pause movie" }).click();

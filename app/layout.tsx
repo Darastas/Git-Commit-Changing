@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Repo Movie Machine",
-  description: "Generate a playable code city movie from a public GitHub repository."
+  description: "Generate a playable commit trend movie from a public GitHub repository."
 };
 
 export default function RootLayout({

@@ -1,6 +1,6 @@
 # Repo Movie Machine
 
-Repo Movie Machine is a compact creative developer tool that turns a public GitHub repository into a playable "code city movie." Users paste a repository URL, the server fetches recent GitHub commit history, the analyzer builds a durable `RepoMovie` JSON model, and the browser renders an animated 2D city timeline.
+Repo Movie Machine is a compact creative developer tool that turns a public GitHub repository into a playable commit trend movie. Users paste a repository URL, the server fetches recent GitHub commit history, the analyzer builds a durable `RepoMovie` JSON model, and the browser renders an animated cumulative commit timeline.
 
 ## What Works
 
@@ -14,12 +14,12 @@ Repo Movie Machine is a compact creative developer tool that turns a public GitH
 - Async job abstraction with in-memory queue/store.
 - Movie cache keyed by provider, owner, repo, branch, latest SHA, and commit limit.
 - Commit limits: 30, 60, 100. Default: 60.
-- 2D code city player:
-  - directory districts
-  - file buildings
-  - language colors
-  - size and activity scores
-  - changed-file glow and commit wave effects
+- 2D commit trend player:
+  - x-axis dates with commits
+  - y-axis cumulative commit count
+  - continuously moving curve reveal
+  - in-canvas author, date, SHA, file count, and delta HUD
+  - language colors and file inspection context
   - play, pause, scrub, speed, jump start/end
   - commit panel and file inspector
 - Shareable local movie route: `/movie/[jobId]`.
@@ -45,7 +45,7 @@ The app includes a sample movie, so the player works before a live repository is
 
 `GITHUB_TOKEN` is optional but recommended. Without it, GitHub's unauthenticated API rate limits are much lower, so the app uses summary mode: it fetches repository metadata and the commit list, then generates timeline activity buildings without per-file commit details. This keeps a 60 or 100 commit movie usable on the low unauthenticated quota.
 
-With `GITHUB_TOKEN` set, the analyzer fetches per-commit file details server-side and produces the richer file-level city. If the token is rate-limited during detail fetching, the job falls back to summary mode instead of failing the whole movie.
+With `GITHUB_TOKEN` set, the analyzer fetches per-commit file details server-side and produces richer commit and file metadata for the trend HUD. If the token is rate-limited during detail fetching, the job falls back to summary mode instead of failing the whole movie.
 
 Create `.env.local`:
 
@@ -139,7 +139,7 @@ Boundaries are intentionally separate: GitHub access, validation, job management
 
 - Jobs and movie artifacts are stored in process memory.
 - Share links survive only while the same server process keeps the in-memory result.
-- Without `GITHUB_TOKEN`, generated movies use commit-list summaries and synthetic `.repo/activity/*` buildings rather than exact changed files.
+- Without `GITHUB_TOKEN`, generated movies use commit-list summaries and synthetic `.repo/activity/*` files rather than exact changed files.
 - With `GITHUB_TOKEN`, commit details are fetched sequentially to stay simple and gentle on GitHub rate limits.
 - The analyzer uses recent GitHub API commits only; it does not clone full repository history.
 - Very large repositories should use the 30-commit setting first.

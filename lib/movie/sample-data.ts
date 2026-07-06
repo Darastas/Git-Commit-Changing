@@ -44,7 +44,7 @@ const sampleCommits: GitHubCommitDetail[] = [
   {
     sha: "sample003",
     commit: {
-      message: "Render code city timeline",
+      message: "Draw commit trend timeline",
       author: { name: "Noor", date: "2024-01-09T09:15:00Z" }
     },
     author: { login: "noor", avatar_url: "https://avatars.githubusercontent.com/u/9919?v=4" },

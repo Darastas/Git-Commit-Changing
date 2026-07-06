@@ -8,7 +8,7 @@ const stageLabels: Record<AnalysisJob["progressStage"], string> = {
   "fetching-repo": "Fetching repository metadata",
   "fetching-commits": "Fetching commit details",
   "analyzing-changes": "Analyzing file changes",
-  "building-city": "Building code city",
+  "building-city": "Building trend movie",
   "storing-result": "Storing movie artifact",
   ready: "Movie ready",
   failed: "Analysis failed"

@@ -17,6 +17,7 @@ beforeAll(() => {
     roundRect: () => undefined,
     arc: () => undefined,
     ellipse: () => undefined,
+    measureText: (text: string) => ({ width: text.length * 7 }),
     fill: () => undefined,
     stroke: () => undefined,
     fillText: () => undefined,
@@ -24,12 +25,13 @@ beforeAll(() => {
     restore: () => undefined,
     moveTo: () => undefined,
     quadraticCurveTo: () => undefined,
+    bezierCurveTo: () => undefined,
     lineTo: () => undefined
   })) as unknown) as typeof HTMLCanvasElement.prototype.getContext;
 });
 
 describe("MoviePlayer", () => {
-  it("renders the playable code city workspace controls for a movie", () => {
+  it("renders the playable commit trend workspace controls for a movie", () => {
     render(<MoviePlayer movie={sampleMovie} />);
 
     expect(screen.getByText("demo/signal-studio")).toBeTruthy();
@@ -46,7 +48,7 @@ describe("MoviePlayer", () => {
 
     expect(screen.getByText("Commit trail")).toBeTruthy();
     expect(screen.getByText("@mina")).toBeTruthy();
-    expect(screen.getByText("Render code city timeline")).toBeTruthy();
+    expect(screen.getByText("Draw commit trend timeline")).toBeTruthy();
     expect(screen.getByText("2024/1/2")).toBeTruthy();
   });
 

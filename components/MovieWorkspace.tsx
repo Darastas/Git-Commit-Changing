@@ -111,7 +111,7 @@ export function MovieWorkspace() {
             <div className="mb-4">
               <p className="font-mono text-[0.68rem] uppercase text-amber-300">Repo Movie Machine</p>
               <h2 className="mt-2 text-xl font-semibold leading-tight text-stone-50">
-                Turn commits into a live code skyline.
+                Turn commits into a live trend movie.
               </h2>
             </div>
           <RepoInput onSubmit={startJob} isLoading={loading} initialRepo={initialRepo} />
@@ -132,7 +132,7 @@ export function MovieWorkspace() {
             </div>
             <div>
               <p className="font-mono text-lg font-semibold text-stone-50">{visibleMovie.directories.length}</p>
-              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">districts</p>
+              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">paths</p>
             </div>
           </div>
           <div className="mt-4 grid gap-2">
