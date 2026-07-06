@@ -21,12 +21,15 @@ beforeAll(() => {
     fill: () => undefined,
     stroke: () => undefined,
     fillText: () => undefined,
+    clip: () => undefined,
+    drawImage: () => undefined,
     save: () => undefined,
     restore: () => undefined,
     moveTo: () => undefined,
     quadraticCurveTo: () => undefined,
     bezierCurveTo: () => undefined,
-    lineTo: () => undefined
+    lineTo: () => undefined,
+    setLineDash: () => undefined
   })) as unknown) as typeof HTMLCanvasElement.prototype.getContext;
 });
 
@@ -40,6 +43,8 @@ describe("MoviePlayer", () => {
     expect(screen.getByText("JSON")).toBeTruthy();
     expect(screen.getByText("PNG")).toBeTruthy();
     expect(screen.getByText("WebM")).toBeTruthy();
+    expect(screen.getByLabelText("Curve style")).toBeTruthy();
+    expect(screen.getByLabelText("Color theme")).toBeTruthy();
     expect(screen.getAllByText("Bootstrap interface shell").length).toBeGreaterThan(0);
   });
 

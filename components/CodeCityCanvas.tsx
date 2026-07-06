@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import {
   buildCommitTrend,
   interpolateTrendPoint,
@@ -13,6 +13,8 @@ import type { MovieFile, RepoMovie } from "@/lib/movie/repo-movie-types";
 type CodeCityCanvasProps = {
   movie: RepoMovie;
   playheadProgress: number;
+  curveStyle: ChartCurveStyle;
+  colorTheme: ChartColorTheme;
   selectedPath?: string;
   onSelectFile: (path: string) => void;
 };
@@ -36,8 +38,75 @@ type ChartPoint = {
   source: CommitTrendPoint;
 };
 
+type ChangedFile = CommitTrendPoint["changedFiles"][number];
+
+export type ChartCurveStyle = "smooth" | "linear" | "dash";
+export type ChartColorTheme = "aurora" | "ember" | "lagoon";
+
+type ChartPalette = {
+  name: ChartColorTheme;
+  background: [string, string, string];
+  ambient: [string, string, string];
+  commitStops: [string, string, string];
+  starStops: [string, string, string];
+  commitGlow: string;
+  starGlow: string;
+  cursor: string;
+  cursorHalo: string;
+  progressStops: [string, string, string];
+  selectedFill: string;
+  selectedStroke: string;
+};
+
 const CANVAS_MIN_RENDER_SCALE = 2;
 const CANVAS_MAX_RENDER_SCALE = 3;
+const CANVAS_FONT_SANS = 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const CANVAS_FONT_MONO = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
+
+const CHART_PALETTES: Record<ChartColorTheme, ChartPalette> = {
+  aurora: {
+    name: "aurora",
+    background: ["#070909", "#11130f", "#090708"],
+    ambient: ["rgba(20, 184, 166, 0.16)", "rgba(250, 204, 21, 0.055)", "rgba(244, 63, 94, 0)"],
+    commitStops: ["#14b8a6", "#facc15", "#fb7185"],
+    starStops: ["rgba(20, 184, 166, 0.34)", "rgba(56, 189, 248, 0.82)", "rgba(186, 230, 253, 0.74)"],
+    commitGlow: "#facc15",
+    starGlow: "#38bdf8",
+    cursor: "#fff7d6",
+    cursorHalo: "rgba(250, 204, 21, 0.34)",
+    progressStops: ["rgba(20, 184, 166, 0.42)", "rgba(250, 204, 21, 0.36)", "rgba(244, 63, 94, 0.32)"],
+    selectedFill: "rgba(20, 184, 166, 0.1)",
+    selectedStroke: "rgba(20, 184, 166, 0.24)"
+  },
+  ember: {
+    name: "ember",
+    background: ["#090807", "#17110c", "#0b0908"],
+    ambient: ["rgba(248, 113, 113, 0.14)", "rgba(251, 191, 36, 0.075)", "rgba(45, 212, 191, 0)"],
+    commitStops: ["#fb7185", "#f59e0b", "#fde68a"],
+    starStops: ["rgba(250, 204, 21, 0.28)", "rgba(251, 146, 60, 0.72)", "rgba(254, 215, 170, 0.74)"],
+    commitGlow: "#fb923c",
+    starGlow: "#f59e0b",
+    cursor: "#fff7ed",
+    cursorHalo: "rgba(251, 146, 60, 0.34)",
+    progressStops: ["rgba(251, 113, 133, 0.4)", "rgba(245, 158, 11, 0.34)", "rgba(254, 240, 138, 0.25)"],
+    selectedFill: "rgba(251, 146, 60, 0.11)",
+    selectedStroke: "rgba(251, 146, 60, 0.28)"
+  },
+  lagoon: {
+    name: "lagoon",
+    background: ["#06100f", "#0b1617", "#071013"],
+    ambient: ["rgba(45, 212, 191, 0.14)", "rgba(56, 189, 248, 0.07)", "rgba(129, 140, 248, 0)"],
+    commitStops: ["#2dd4bf", "#38bdf8", "#a78bfa"],
+    starStops: ["rgba(34, 211, 238, 0.28)", "rgba(96, 165, 250, 0.82)", "rgba(196, 181, 253, 0.72)"],
+    commitGlow: "#38bdf8",
+    starGlow: "#818cf8",
+    cursor: "#ecfeff",
+    cursorHalo: "rgba(56, 189, 248, 0.32)",
+    progressStops: ["rgba(45, 212, 191, 0.38)", "rgba(56, 189, 248, 0.34)", "rgba(167, 139, 250, 0.3)"],
+    selectedFill: "rgba(56, 189, 248, 0.1)",
+    selectedStroke: "rgba(56, 189, 248, 0.28)"
+  }
+};
 
 const canvasFallbackBackground = {
   backgroundColor: "#090b0a",
@@ -272,7 +341,26 @@ function appendCurveSegments(ctx: CanvasRenderingContext2D, points: Array<{ x: n
   }
 }
 
-function drawSmoothPath(ctx: CanvasRenderingContext2D, points: Array<{ x: number; y: number }>) {
+function appendPathSegments(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+  curveStyle: ChartCurveStyle
+) {
+  if (curveStyle === "linear") {
+    for (let index = 1; index < points.length; index += 1) {
+      ctx.lineTo(points[index].x, points[index].y);
+    }
+    return;
+  }
+
+  appendCurveSegments(ctx, points);
+}
+
+function drawChartPath(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+  curveStyle: ChartCurveStyle
+) {
   if (points.length === 0) {
     return;
   }
@@ -284,16 +372,23 @@ function drawSmoothPath(ctx: CanvasRenderingContext2D, points: Array<{ x: number
     return;
   }
 
-  appendCurveSegments(ctx, points);
+  appendPathSegments(ctx, points, curveStyle);
 }
 
-function visualCursorPoint(coordinates: ChartPoint[], interpolated: InterpolatedTrendPoint) {
+function visualCursorPoint(coordinates: ChartPoint[], interpolated: InterpolatedTrendPoint, curveStyle: ChartCurveStyle) {
   if (coordinates.length <= 1) {
     return coordinates[0] ?? { x: 0, y: 0 };
   }
 
   const from = coordinates[interpolated.segmentIndex];
   const to = coordinates[Math.min(coordinates.length - 1, interpolated.segmentIndex + 1)];
+  if (curveStyle === "linear") {
+    return {
+      x: from.x + (to.x - from.x) * interpolated.segmentProgress,
+      y: from.y + (to.y - from.y) * interpolated.segmentProgress
+    };
+  }
+
   const { c1, c2 } = curveControls(from, to);
   return cubicPoint(from, c1, c2, to, interpolated.segmentProgress);
 }
@@ -314,18 +409,18 @@ function drawCanvasStar(ctx: CanvasRenderingContext2D, x: number, y: number, rad
   ctx.closePath();
 }
 
-function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: number, tempo: number) {
+function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: number, tempo: number, palette: ChartPalette) {
   const background = ctx.createLinearGradient(0, 0, width, height);
-  background.addColorStop(0, "#070909");
-  background.addColorStop(0.42, "#11130f");
-  background.addColorStop(1, "#090708");
+  background.addColorStop(0, palette.background[0]);
+  background.addColorStop(0.42, palette.background[1]);
+  background.addColorStop(1, palette.background[2]);
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, width, height);
 
   const ambient = ctx.createRadialGradient(width * 0.28, height * 0.2, 20, width * 0.28, height * 0.2, width * 0.72);
-  ambient.addColorStop(0, "rgba(20, 184, 166, 0.16)");
-  ambient.addColorStop(0.46, "rgba(250, 204, 21, 0.055)");
-  ambient.addColorStop(1, "rgba(244, 63, 94, 0)");
+  ambient.addColorStop(0, palette.ambient[0]);
+  ambient.addColorStop(0.46, palette.ambient[1]);
+  ambient.addColorStop(1, palette.ambient[2]);
   ctx.fillStyle = ambient;
   ctx.fillRect(0, 0, width, height);
 
@@ -349,7 +444,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, width: number, height: nu
   ctx.restore();
 }
 
-function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: CommitTrendPoint[]) {
+function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: CommitTrendPoint[], palette: ChartPalette) {
   const { chart, small } = layout;
   const maxCommits = Math.max(1, points.length);
   const maxStars = Math.max(0, ...points.map((point) => point.cumulativeStars));
@@ -362,7 +457,7 @@ function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: Co
 
   ctx.strokeStyle = "rgba(231, 229, 228, 0.16)";
   ctx.lineWidth = 1;
-  ctx.font = `${small ? 9 : 10}px ui-monospace, monospace`;
+  ctx.font = `600 ${small ? 9 : 10}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(214, 211, 209, 0.62)";
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
@@ -414,23 +509,23 @@ function drawAxes(ctx: CanvasRenderingContext2D, layout: ChartLayout, points: Co
 
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.font = `700 ${small ? 10 : 12}px ui-monospace, monospace`;
+  ctx.font = `800 ${small ? 10 : 12}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(245, 245, 244, 0.9)";
   ctx.fillText(small ? "Commits" : "Cumulative commits", chart.x, chart.y - 18);
   if (!small) {
-    ctx.font = "10px ui-monospace, monospace";
+    ctx.font = `600 10px ${CANVAS_FONT_SANS}`;
     ctx.fillStyle = "rgba(214, 211, 209, 0.58)";
     ctx.fillText("dates with commits", chart.x + 152, chart.y - 18);
   }
   if (maxStars > 0) {
     const legendX = chart.x + chart.width - (small ? 60 : 132);
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.82)";
+    ctx.strokeStyle = palette.starStops[1];
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(legendX, chart.y - 21);
     ctx.lineTo(legendX + 20, chart.y - 21);
     ctx.stroke();
-    ctx.fillStyle = "rgba(186, 230, 253, 0.82)";
+    ctx.fillStyle = palette.starStops[2];
     ctx.fillText(small ? "stars" : `estimated stars ${formatStars(maxStars)}`, legendX + 26, chart.y - 18);
   }
   ctx.restore();
@@ -441,7 +536,9 @@ function drawTrendCurve(
   layout: ChartLayout,
   points: CommitTrendPoint[],
   progress: number,
-  tempo: number
+  tempo: number,
+  palette: ChartPalette,
+  curveStyle: ChartCurveStyle
 ) {
   const { chart } = layout;
   const coordinates = buildChartPoints(points, chart);
@@ -449,7 +546,7 @@ function drawTrendCurve(
   if (!interpolated) {
     return undefined;
   }
-  const cursor = visualCursorPoint(coordinates, interpolated);
+  const cursor = visualCursorPoint(coordinates, interpolated, curveStyle);
   const revealed = coordinates.slice(0, interpolated.segmentIndex + 1);
   const last = revealed[revealed.length - 1];
   if (!last || Math.abs(last.x - cursor.x) > 0.01 || Math.abs(last.y - cursor.y) > 0.01) {
@@ -459,42 +556,51 @@ function drawTrendCurve(
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  if (curveStyle === "dash") {
+    ctx.setLineDash([9, 11]);
+  }
 
   ctx.strokeStyle = "rgba(245, 245, 244, 0.18)";
   ctx.lineWidth = 1.6;
-  drawSmoothPath(ctx, coordinates);
+  drawChartPath(ctx, coordinates, curveStyle);
   ctx.stroke();
 
+  ctx.setLineDash([]);
   if (revealed.length > 0) {
     const area = ctx.createLinearGradient(0, chart.y, 0, chart.y + chart.height);
-    area.addColorStop(0, "rgba(20, 184, 166, 0.22)");
-    area.addColorStop(0.55, "rgba(250, 204, 21, 0.08)");
-    area.addColorStop(1, "rgba(244, 63, 94, 0.02)");
+    area.addColorStop(0, `${palette.commitStops[0]}33`);
+    area.addColorStop(0.55, `${palette.commitStops[1]}16`);
+    area.addColorStop(1, `${palette.commitStops[2]}08`);
 
     ctx.beginPath();
     ctx.moveTo(revealed[0].x, chart.y + chart.height);
     ctx.lineTo(revealed[0].x, revealed[0].y);
-    appendCurveSegments(ctx, revealed);
+    appendPathSegments(ctx, revealed, curveStyle);
     ctx.lineTo(revealed[revealed.length - 1].x, chart.y + chart.height);
     ctx.closePath();
     ctx.fillStyle = area;
     ctx.fill();
 
     const stroke = ctx.createLinearGradient(chart.x, 0, chart.x + chart.width, 0);
-    stroke.addColorStop(0, "#14b8a6");
-    stroke.addColorStop(0.52, "#facc15");
-    stroke.addColorStop(1, "#fb7185");
+    stroke.addColorStop(0, palette.commitStops[0]);
+    stroke.addColorStop(0.52, palette.commitStops[1]);
+    stroke.addColorStop(1, palette.commitStops[2]);
     ctx.strokeStyle = stroke;
-    ctx.lineWidth = 3.4;
-    ctx.shadowColor = "#facc15";
-    ctx.shadowBlur = 16 + Math.sin(tempo * 2.4) * 4;
-    drawSmoothPath(ctx, revealed);
+    ctx.lineWidth = curveStyle === "dash" ? 3 : 3.4;
+    ctx.shadowColor = palette.commitGlow;
+    ctx.shadowBlur = curveStyle === "linear" ? 10 : 16 + Math.sin(tempo * 2.4) * 4;
+    if (curveStyle === "dash") {
+      ctx.setLineDash([13, 9]);
+      ctx.lineDashOffset = -tempo * 18;
+    }
+    drawChartPath(ctx, revealed, curveStyle);
     ctx.stroke();
 
+    ctx.setLineDash([]);
     ctx.shadowBlur = 0;
     ctx.strokeStyle = "rgba(255, 251, 235, 0.74)";
     ctx.lineWidth = 1.1;
-    drawSmoothPath(ctx, revealed);
+    drawChartPath(ctx, revealed, curveStyle);
     ctx.stroke();
   }
 
@@ -509,7 +615,7 @@ function drawTrendCurve(
   });
 
   const pulse = 1 + Math.sin(tempo * 4.8) * 0.12;
-  ctx.strokeStyle = "rgba(250, 204, 21, 0.28)";
+  ctx.strokeStyle = palette.cursorHalo;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(cursor.x, chart.y);
@@ -518,14 +624,14 @@ function drawTrendCurve(
 
   const halo = ctx.createRadialGradient(cursor.x, cursor.y, 2, cursor.x, cursor.y, 34 * pulse);
   halo.addColorStop(0, "rgba(255, 251, 235, 0.82)");
-  halo.addColorStop(0.26, "rgba(250, 204, 21, 0.34)");
-  halo.addColorStop(1, "rgba(250, 204, 21, 0)");
+  halo.addColorStop(0.26, palette.cursorHalo);
+  halo.addColorStop(1, `${palette.commitGlow}00`);
   ctx.fillStyle = halo;
   ctx.beginPath();
   ctx.arc(cursor.x, cursor.y, 34 * pulse, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = "#fff7d6";
+  ctx.fillStyle = palette.cursor;
   ctx.beginPath();
   ctx.arc(cursor.x, cursor.y, 5.2, 0, Math.PI * 2);
   ctx.fill();
@@ -536,8 +642,10 @@ function drawTrendCurve(
     if (!trailing) {
       continue;
     }
-    const trailingPoint = visualCursorPoint(coordinates, trailing);
-    ctx.fillStyle = `rgba(20, 184, 166, ${0.22 - trail * 0.045})`;
+    const trailingPoint = visualCursorPoint(coordinates, trailing, curveStyle);
+    ctx.fillStyle = `${palette.commitStops[0]}${Math.round((0.22 - trail * 0.045) * 255)
+      .toString(16)
+      .padStart(2, "0")}`;
     ctx.beginPath();
     ctx.arc(trailingPoint.x, trailingPoint.y, 6 - trail, 0, Math.PI * 2);
     ctx.fill();
@@ -552,7 +660,9 @@ function drawStarTrendCurve(
   layout: ChartLayout,
   points: CommitTrendPoint[],
   progress: number,
-  tempo: number
+  tempo: number,
+  palette: ChartPalette,
+  curveStyle: ChartCurveStyle
 ) {
   const totalStars = Math.max(0, ...points.map((point) => point.cumulativeStars));
   if (totalStars <= 0) {
@@ -566,7 +676,7 @@ function drawStarTrendCurve(
     return;
   }
 
-  const cursor = visualCursorPoint(coordinates, interpolated);
+  const cursor = visualCursorPoint(coordinates, interpolated, curveStyle);
   const revealed = coordinates.slice(0, interpolated.segmentIndex + 1);
   const last = revealed[revealed.length - 1];
   if (!last || Math.abs(last.x - cursor.x) > 0.01 || Math.abs(last.y - cursor.y) > 0.01) {
@@ -576,22 +686,31 @@ function drawStarTrendCurve(
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  if (curveStyle === "dash") {
+    ctx.setLineDash([7, 8]);
+  }
 
   ctx.strokeStyle = "rgba(125, 211, 252, 0.18)";
   ctx.lineWidth = 1.3;
-  drawSmoothPath(ctx, coordinates);
+  drawChartPath(ctx, coordinates, curveStyle);
   ctx.stroke();
+  ctx.setLineDash([]);
 
   const stroke = ctx.createLinearGradient(chart.x, 0, chart.x + chart.width, 0);
-  stroke.addColorStop(0, "rgba(20, 184, 166, 0.34)");
-  stroke.addColorStop(0.5, "rgba(56, 189, 248, 0.82)");
-  stroke.addColorStop(1, "rgba(186, 230, 253, 0.74)");
+  stroke.addColorStop(0, palette.starStops[0]);
+  stroke.addColorStop(0.5, palette.starStops[1]);
+  stroke.addColorStop(1, palette.starStops[2]);
   ctx.strokeStyle = stroke;
-  ctx.lineWidth = 2.2;
-  ctx.shadowColor = "#38bdf8";
-  ctx.shadowBlur = 12 + Math.sin(tempo * 2.1) * 3;
-  drawSmoothPath(ctx, revealed);
+  ctx.lineWidth = curveStyle === "linear" ? 1.8 : 2.2;
+  ctx.shadowColor = palette.starGlow;
+  ctx.shadowBlur = curveStyle === "linear" ? 7 : 12 + Math.sin(tempo * 2.1) * 3;
+  if (curveStyle === "dash") {
+    ctx.setLineDash([10, 7]);
+    ctx.lineDashOffset = -tempo * 12;
+  }
+  drawChartPath(ctx, revealed, curveStyle);
   ctx.stroke();
+  ctx.setLineDash([]);
 
   ctx.shadowBlur = 0;
   coordinates.forEach((point, index) => {
@@ -602,9 +721,9 @@ function drawStarTrendCurve(
   });
 
   const halo = ctx.createRadialGradient(cursor.x, cursor.y, 2, cursor.x, cursor.y, 24);
-  halo.addColorStop(0, "rgba(186, 230, 253, 0.76)");
-  halo.addColorStop(0.42, "rgba(56, 189, 248, 0.24)");
-  halo.addColorStop(1, "rgba(56, 189, 248, 0)");
+  halo.addColorStop(0, "rgba(255, 255, 255, 0.76)");
+  halo.addColorStop(0.42, palette.starStops[1]);
+  halo.addColorStop(1, `${palette.starGlow}00`);
   ctx.fillStyle = halo;
   ctx.beginPath();
   ctx.arc(cursor.x, cursor.y, 24, 0, Math.PI * 2);
@@ -624,12 +743,151 @@ function drawHudMetric(
   y: number,
   width: number
 ) {
-  ctx.font = "10px ui-monospace, monospace";
+  ctx.font = `700 10px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(168, 162, 158, 0.82)";
   ctx.fillText(label.toUpperCase(), x, y);
-  ctx.font = "700 12px ui-monospace, monospace";
+  ctx.font = `800 13px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(255, 251, 235, 0.92)";
   drawFitText(ctx, value, x, y + 16, width);
+}
+
+function fileStatusColor(status: string) {
+  if (status === "added") {
+    return "#34d399";
+  }
+  if (status === "removed") {
+    return "#fb7185";
+  }
+  if (status === "renamed") {
+    return "#fbbf24";
+  }
+  return "#38bdf8";
+}
+
+function compactFilePath(path: string) {
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length <= 2) {
+    return path;
+  }
+  return `${parts.at(-2)}/${parts.at(-1)}`;
+}
+
+function displayFilePath(path: string, small: boolean) {
+  if (!small) {
+    return compactFilePath(path);
+  }
+  return path.split("/").filter(Boolean).at(-1) ?? path;
+}
+
+function drawCircularAvatar(
+  ctx: CanvasRenderingContext2D,
+  point: CommitTrendPoint,
+  avatarImages: Map<string, HTMLImageElement>,
+  x: number,
+  y: number,
+  radius: number,
+  tempo: number,
+  palette: ChartPalette
+) {
+  const image = point.authorAvatar ? avatarImages.get(point.authorAvatar) : undefined;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.clip();
+
+  if (image?.complete && image.naturalWidth > 0) {
+    const scale = Math.max((radius * 2) / image.naturalWidth, (radius * 2) / image.naturalHeight);
+    const width = image.naturalWidth * scale;
+    const height = image.naturalHeight * scale;
+    ctx.drawImage(image, x - width / 2, y - height / 2, width, height);
+  } else {
+    const avatarGradient = ctx.createRadialGradient(x - radius * 0.34, y - radius * 0.34, 2, x, y, radius + 10);
+    avatarGradient.addColorStop(0, "rgba(255, 251, 235, 0.98)");
+    avatarGradient.addColorStop(0.46, palette.commitStops[1]);
+    avatarGradient.addColorStop(1, palette.commitStops[0]);
+    ctx.fillStyle = avatarGradient;
+    ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    ctx.fillStyle = "#090b0a";
+    ctx.font = `900 ${Math.max(14, radius * 0.7)}px ${CANVAS_FONT_SANS}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(initialsFor(point.authorName), x, y + 1);
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = `rgba(255, 251, 235, ${0.42 + Math.sin(tempo * 3.2) * 0.08})`;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawChangedFilesList(
+  ctx: CanvasRenderingContext2D,
+  files: ChangedFile[],
+  selectedPath: string | undefined,
+  x: number,
+  y: number,
+  width: number,
+  maxY: number,
+  small: boolean,
+  palette: ChartPalette
+) {
+  const rowHeight = small ? 26 : 30;
+  const gap = small ? 5 : 6;
+  const visibleCount = Math.max(0, Math.min(files.length, Math.floor((maxY - y - 18) / (rowHeight + gap)), small ? 3 : 5));
+  if (visibleCount <= 0) {
+    return y;
+  }
+
+  const selectedChangedFile = files.find((file) => file.path === selectedPath) ?? files[0];
+  ctx.font = `800 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
+  ctx.fillStyle = "rgba(245, 245, 244, 0.86)";
+  ctx.fillText("Changed files", x, y);
+  ctx.font = `700 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
+  ctx.fillStyle = "rgba(168, 162, 158, 0.78)";
+  ctx.textAlign = "right";
+  ctx.fillText(String(files.length), x + width, y);
+  ctx.textAlign = "left";
+  y += small ? 12 : 14;
+
+  files.slice(0, visibleCount).forEach((file) => {
+    const active = file.path === selectedChangedFile.path;
+    ctx.fillStyle = active ? palette.selectedFill : "rgba(9, 11, 10, 0.58)";
+    ctx.strokeStyle = active ? palette.selectedStroke : "rgba(68, 64, 60, 0.72)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, rowHeight, 7);
+    ctx.fill();
+    ctx.stroke();
+
+    const statusColor = fileStatusColor(file.status);
+    ctx.fillStyle = statusColor;
+    ctx.beginPath();
+    ctx.arc(x + 10, y + rowHeight / 2, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = `800 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
+    ctx.fillStyle = active ? "rgba(240, 253, 250, 0.95)" : "rgba(231, 229, 228, 0.86)";
+    drawFitText(ctx, displayFilePath(file.path, small), x + 19, y + rowHeight / 2 + 4, width - (small ? 58 : 72));
+
+    ctx.textAlign = "right";
+    ctx.font = `800 ${small ? 9 : 10}px ${CANVAS_FONT_SANS}`;
+    ctx.fillStyle = "rgba(214, 211, 209, 0.72)";
+    ctx.fillText(String(file.changes), x + width - 9, y + rowHeight / 2 + 4);
+    ctx.textAlign = "left";
+    y += rowHeight + gap;
+  });
+
+  const hidden = files.length - visibleCount;
+  if (hidden > 0 && y + 14 <= maxY) {
+    ctx.font = `700 ${small ? 9 : 10}px ${CANVAS_FONT_SANS}`;
+    ctx.fillStyle = "rgba(168, 162, 158, 0.68)";
+    ctx.fillText(`+${hidden} more`, x + 2, y + 8);
+  }
+
+  return y;
 }
 
 function drawHud(
@@ -639,7 +897,9 @@ function drawHud(
   point: CommitTrendPoint,
   selectedFile: MovieFile | undefined,
   progress: number,
-  tempo: number
+  tempo: number,
+  palette: ChartPalette,
+  avatarImages: Map<string, HTMLImageElement>
 ) {
   const { hud, small } = layout;
   const padding = small ? 12 : 16;
@@ -658,117 +918,106 @@ function drawHud(
 
   const progressHeight = Math.max(3, hud.height * progress);
   const progressGradient = ctx.createLinearGradient(0, hud.y + hud.height, 0, hud.y);
-  progressGradient.addColorStop(0, "rgba(20, 184, 166, 0.42)");
-  progressGradient.addColorStop(0.52, "rgba(250, 204, 21, 0.36)");
-  progressGradient.addColorStop(1, "rgba(244, 63, 94, 0.32)");
+  progressGradient.addColorStop(0, palette.progressStops[0]);
+  progressGradient.addColorStop(0.52, palette.progressStops[1]);
+  progressGradient.addColorStop(1, palette.progressStops[2]);
   ctx.fillStyle = progressGradient;
   ctx.fillRect(hud.x, hud.y + hud.height - progressHeight, 3, progressHeight);
 
   const x = hud.x + padding;
   let y = hud.y + padding;
-  const avatarRadius = small ? 19 : 24;
+  const avatarRadius = small ? 21 : 27;
   const avatarX = x + avatarRadius;
   const avatarY = y + avatarRadius;
-  const avatarGradient = ctx.createRadialGradient(avatarX - 8, avatarY - 8, 2, avatarX, avatarY, avatarRadius + 10);
-  avatarGradient.addColorStop(0, "rgba(255, 251, 235, 0.98)");
-  avatarGradient.addColorStop(0.42, "rgba(250, 204, 21, 0.9)");
-  avatarGradient.addColorStop(1, "rgba(20, 184, 166, 0.74)");
-  ctx.fillStyle = avatarGradient;
-  ctx.beginPath();
-  ctx.arc(avatarX, avatarY, avatarRadius, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = `rgba(255, 251, 235, ${0.34 + Math.sin(tempo * 3.2) * 0.08})`;
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-
-  ctx.fillStyle = "#090b0a";
-  ctx.font = `800 ${small ? 13 : 16}px ui-sans-serif, system-ui, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(initialsFor(point.authorName), avatarX, avatarY + 1);
+  drawCircularAvatar(ctx, point, avatarImages, avatarX, avatarY, avatarRadius, tempo, palette);
 
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   const nameX = avatarX + avatarRadius + 10;
   const nameWidth = hud.x + hud.width - padding - nameX;
-  ctx.font = `700 ${small ? 12 : 14}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.font = `800 ${small ? 14 : 16}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(255, 251, 235, 0.94)";
   drawFitText(ctx, point.authorName, nameX, y + avatarRadius - 1, nameWidth);
-  ctx.font = `${small ? 10 : 11}px ui-monospace, monospace`;
+  ctx.font = `700 ${small ? 11 : 12}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(168, 162, 158, 0.88)";
   drawFitText(ctx, point.authorLogin ? `@${point.authorLogin}` : point.shortSha, nameX, y + avatarRadius + 16, nameWidth);
 
   y += avatarRadius * 2 + (small ? 18 : 24);
 
-  ctx.font = `800 ${small ? 24 : 32}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.font = `900 ${small ? 28 : 36}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(255, 251, 235, 0.98)";
   ctx.fillText(String(current), x, y + (small ? 24 : 32));
-  ctx.font = `700 ${small ? 10 : 12}px ui-monospace, monospace`;
-  ctx.fillStyle = "rgba(250, 204, 21, 0.9)";
+  ctx.font = `800 ${small ? 11 : 13}px ${CANVAS_FONT_SANS}`;
+  ctx.fillStyle = palette.commitStops[1];
   ctx.fillText(`/ ${total} commits`, x + (small ? 34 : 46), y + (small ? 23 : 30));
   y += small ? 48 : 60;
 
-  ctx.font = `700 ${small ? 11 : 13}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.font = `800 ${small ? 13 : 15}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(245, 245, 244, 0.92)";
-  wrapText(ctx, point.message || "Untitled commit", x, y, contentWidth, small ? 15 : 17, small ? 2 : 3);
-  y += small ? 46 : 64;
+  wrapText(ctx, point.message || "Untitled commit", x, y, contentWidth, small ? 16 : 19, small ? 2 : 3);
+  y += small ? 46 : 60;
 
   const columnGap = small ? 8 : 12;
   const metricWidth = (contentWidth - columnGap) / 2;
   drawHudMetric(ctx, "Date", formatHudDate(point.date), x, y, metricWidth);
   drawHudMetric(ctx, "Files", String(point.changedFiles.length), x + metricWidth + columnGap, y, metricWidth);
-  y += small ? 44 : 50;
+  y += small ? 36 : 50;
   drawHudMetric(ctx, "Delta", `+${point.additions} / -${point.deletions}`, x, y, metricWidth);
   drawHudMetric(ctx, "Stars", formatStars(point.cumulativeStars), x + metricWidth + columnGap, y, metricWidth);
-  y += small ? 48 : 56;
+  y += small ? 38 : 56;
 
-  if (y < hud.y + hud.height - 76) {
-    ctx.font = "10px ui-monospace, monospace";
+  if (y < hud.y + hud.height - 92) {
+    ctx.font = `700 10px ${CANVAS_FONT_SANS}`;
     ctx.fillStyle = "rgba(168, 162, 158, 0.76)";
     ctx.fillText("SHA", x, y - 6);
-    ctx.font = `700 ${small ? 10 : 11}px ui-monospace, monospace`;
+    ctx.font = `800 ${small ? 10 : 11}px ${CANVAS_FONT_MONO}`;
     ctx.fillStyle = "rgba(214, 211, 209, 0.86)";
     drawFitText(ctx, point.shortSha, x + 28, y - 6, contentWidth - 28);
     y += small ? 18 : 20;
   }
 
-  if (selectedFile && y < hud.y + hud.height - 34) {
-    ctx.fillStyle = "rgba(20, 184, 166, 0.1)";
-    ctx.strokeStyle = "rgba(20, 184, 166, 0.24)";
-    ctx.beginPath();
-    ctx.roundRect(x, y - 12, contentWidth, small ? 42 : 48, 7);
-    ctx.fill();
-    ctx.stroke();
-    ctx.font = "10px ui-monospace, monospace";
-    ctx.fillStyle = "rgba(168, 162, 158, 0.86)";
-    ctx.fillText("SELECTED FILE", x + 10, y + 2);
-    ctx.font = `700 ${small ? 10 : 11}px ui-monospace, monospace`;
-    ctx.fillStyle = "rgba(236, 253, 245, 0.92)";
-    drawFitText(ctx, selectedFile.path, x + 10, y + 19, contentWidth - 20);
-  }
+  const fileListY =
+    point.changedFiles.length > 0 ? Math.min(y, hud.y + hud.height - (small ? 76 : 124)) : y;
+  drawChangedFilesList(ctx, point.changedFiles, selectedFile?.path, x, fileListY, contentWidth, hud.y + hud.height - 14, small, palette);
 
   ctx.restore();
 }
 
 function drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number) {
-  drawBackground(ctx, width, height, 0);
+  drawBackground(ctx, width, height, 0, CHART_PALETTES.aurora);
   ctx.save();
   ctx.fillStyle = "rgba(245, 245, 244, 0.86)";
-  ctx.font = "700 16px ui-sans-serif, system-ui, sans-serif";
+  ctx.font = `800 16px ${CANVAS_FONT_SANS}`;
   ctx.textAlign = "center";
   ctx.fillText("No commit data available", width / 2, height / 2);
   ctx.restore();
 }
 
 export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>(function CodeCityCanvas(
-  { movie, playheadProgress, selectedPath, onSelectFile },
+  { movie, playheadProgress, curveStyle, colorTheme, selectedPath, onSelectFile },
   forwardedRef
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const avatarImagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
   useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement);
   const trend = useMemo(() => buildCommitTrend(movie), [movie]);
+  const palette = CHART_PALETTES[colorTheme];
   const selectedFile = selectedPath ? movie.files[selectedPath] : undefined;
+
+  useEffect(() => {
+    const cache = avatarImagesRef.current;
+    const avatarUrls = new Set(trend.map((point) => point.authorAvatar).filter((avatar): avatar is string => Boolean(avatar)));
+    avatarUrls.forEach((avatarUrl) => {
+      if (cache.has(avatarUrl)) {
+        return;
+      }
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.decoding = "async";
+      image.src = avatarUrl;
+      cache.set(avatarUrl, image);
+    });
+  }, [trend]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -814,14 +1063,14 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
       const progress = trend.length <= 1 ? 1 : clamp(playheadProgress, 0, 1);
       const activePoint = nearestTrendPoint(trend, progress) ?? trend[0];
 
-      drawBackground(ctx, width, height, tempo);
-      drawAxes(ctx, layout, trend);
-      drawStarTrendCurve(ctx, layout, trend, progress, tempo);
-      drawTrendCurve(ctx, layout, trend, progress, tempo);
-      drawHud(ctx, layout, movie, activePoint, selectedFile, progress, tempo);
+      drawBackground(ctx, width, height, tempo, palette);
+      drawAxes(ctx, layout, trend, palette);
+      drawStarTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle);
+      drawTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle);
+      drawHud(ctx, layout, movie, activePoint, selectedFile, progress, tempo, palette, avatarImagesRef.current);
 
       ctx.save();
-      ctx.font = "700 11px ui-monospace, monospace";
+      ctx.font = `700 11px ${CANVAS_FONT_SANS}`;
       ctx.fillStyle = "rgba(214, 211, 209, 0.72)";
       ctx.fillText(`${movie.repo.fullName} / ${movie.repo.defaultBranch}`, 18, height - 18);
       ctx.restore();
@@ -831,12 +1080,12 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
 
     draw(performance.now());
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [movie, playheadProgress, selectedFile, trend]);
+  }, [movie, playheadProgress, selectedFile, trend, palette, curveStyle]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="aspect-[16/9] min-h-[24rem] w-full rounded-[0.45rem] border border-stone-700/70 bg-stone-950 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:min-h-[28rem] lg:min-h-[30rem]"
+      className="aspect-[16/9] min-h-[26rem] w-full rounded-[0.45rem] border border-stone-700/70 bg-stone-950 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:min-h-[28rem] lg:min-h-[30rem]"
       style={canvasFallbackBackground}
       onClick={(event) => {
         const canvas = canvasRef.current;

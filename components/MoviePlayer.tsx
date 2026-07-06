@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RepoMovie } from "@/lib/movie/repo-movie-types";
 import { getPreferredWebMRecorderOptions, getWebMBlobType } from "@/lib/movie/recording";
 import { advanceTrendProgress } from "@/lib/movie/trend";
-import { CodeCityCanvas } from "./CodeCityCanvas";
+import { CodeCityCanvas, type ChartColorTheme, type ChartCurveStyle } from "./CodeCityCanvas";
 import { CommitPanel } from "./CommitPanel";
 import { FileInspector } from "./FileInspector";
 import { Timeline } from "./Timeline";
@@ -30,6 +30,8 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
   const [recording, setRecording] = useState(false);
   const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [speed, setSpeed] = useState(1);
+  const [curveStyle, setCurveStyle] = useState<ChartCurveStyle>("smooth");
+  const [colorTheme, setColorTheme] = useState<ChartColorTheme>("aurora");
   const [selectedPath, setSelectedPath] = useState<string | undefined>(() => Object.keys(movie.files)[0]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -37,7 +39,9 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
   const frameMax = Math.max(0, movie.frames.length - 1);
   const frameIndex = frameMax === 0 ? 0 : Math.min(frameMax, Math.round(playheadProgress * frameMax));
   const commit = movie.commits[Math.min(frameIndex, movie.commits.length - 1)] ?? movie.commits[0];
-  const selectedFile = selectedPath ? movie.files[selectedPath] : undefined;
+  const fallbackSelectedPath = Object.keys(movie.files)[0];
+  const effectiveSelectedPath = selectedPath && movie.files[selectedPath] ? selectedPath : fallbackSelectedPath;
+  const selectedFile = effectiveSelectedPath ? movie.files[effectiveSelectedPath] : undefined;
   const playbackDurationMs = Math.max(2400, Math.max(1, movie.commits.length) * 1200);
   const shareUrl = useMemo(() => {
     if (typeof window === "undefined" || !jobId) {
@@ -147,7 +151,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
                 ) : null}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             <button
               type="button"
               aria-label="Jump to start"
@@ -186,6 +190,26 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               <option value={2}>2x</option>
               <option value={4}>4x</option>
             </select>
+            <select
+              aria-label="Curve style"
+              className="h-9 rounded-[0.35rem] border border-stone-700 bg-[#090b0a] px-2 text-xs text-stone-200"
+              value={curveStyle}
+              onChange={(event) => setCurveStyle(event.target.value as ChartCurveStyle)}
+            >
+              <option value="smooth">Smooth</option>
+              <option value="linear">Linear</option>
+              <option value="dash">Dash</option>
+            </select>
+            <select
+              aria-label="Color theme"
+              className="h-9 rounded-[0.35rem] border border-stone-700 bg-[#090b0a] px-2 text-xs text-stone-200"
+              value={colorTheme}
+              onChange={(event) => setColorTheme(event.target.value as ChartColorTheme)}
+            >
+              <option value="aurora">Aurora</option>
+              <option value="ember">Ember</option>
+              <option value="lagoon">Lagoon</option>
+            </select>
             </div>
           </div>
           <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-stone-900">
@@ -206,7 +230,9 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
           ref={canvasRef}
           movie={movie}
           playheadProgress={playheadProgress}
-          selectedPath={selectedPath}
+          curveStyle={curveStyle}
+          colorTheme={colorTheme}
+          selectedPath={effectiveSelectedPath}
           onSelectFile={setSelectedPath}
         />
 
