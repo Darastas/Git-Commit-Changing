@@ -3,6 +3,7 @@ node_modules/
 out/
 coverage/
 dist/
+tsconfig.tsbuildinfo
 
 .env
 .env.*
