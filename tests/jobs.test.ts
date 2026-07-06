@@ -1,0 +1,93 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { InMemoryJobStore } from "@/lib/jobs/in-memory-job-store";
+import { createAnalysisJob } from "@/lib/jobs/queue";
+import { InMemoryMovieStorage } from "@/lib/storage/in-memory-storage";
+import { enforceRequestCooldown, normalizeCommitLimit } from "@/lib/security/limits";
+
+describe("InMemoryJobStore", () => {
+  it("creates queued jobs and allows progress updates without losing immutable fields", async () => {
+    const store = new InMemoryJobStore();
+    const job = await store.create({
+      repo: "octocat/Hello-World",
+      normalizedRepo: "octocat/Hello-World",
+      commitLimit: 60
+    });
+
+    await store.update(job.id, {
+      status: "running",
+      progressStage: "fetching-repo",
+      progressPercent: 20
+    });
+
+    const updated = await store.get(job.id);
+    expect(updated).toMatchObject({
+      id: job.id,
+      repo: "octocat/Hello-World",
+      normalizedRepo: "octocat/Hello-World",
+      status: "running",
+      progressStage: "fetching-repo",
+      progressPercent: 20
+    });
+    expect(updated?.createdAt).toBe(job.createdAt);
+    expect(updated?.updatedAt).not.toBe(job.updatedAt);
+  });
+});
+
+describe("InMemoryMovieStorage", () => {
+  it("stores movies by stable storage key", async () => {
+    const storage = new InMemoryMovieStorage();
+    const movie = { version: "1.0" } as never;
+
+    await storage.set("github:octocat:hello-world:main:sha:30", movie);
+
+    await expect(storage.get("github:octocat:hello-world:main:sha:30")).resolves.toBe(movie);
+    await expect(storage.get("missing")).resolves.toBeUndefined();
+  });
+});
+
+describe("normalizeCommitLimit", () => {
+  it("allows only supported commit limits and defaults to 60", () => {
+    expect(normalizeCommitLimit(undefined)).toBe(60);
+    expect(normalizeCommitLimit(30)).toBe(30);
+    expect(normalizeCommitLimit(60)).toBe(60);
+    expect(normalizeCommitLimit(100)).toBe(100);
+    expect(() => normalizeCommitLimit(10)).toThrow(/30, 60, or 100/);
+  });
+});
+
+describe("enforceRequestCooldown", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-01T00:00:00Z"));
+  });
+
+  it("blocks repeated submissions from the same key inside the cooldown window", () => {
+    const state = new Map<string, number>();
+
+    expect(enforceRequestCooldown("local", state)).toBe(true);
+    expect(enforceRequestCooldown("local", state)).toBe(false);
+
+    vi.advanceTimersByTime(12_000);
+    expect(enforceRequestCooldown("local", state)).toBe(true);
+  });
+});
+
+describe("createAnalysisJob", () => {
+  it("normalizes repo input before storing the job", async () => {
+    const store = new InMemoryJobStore();
+
+    const job = await createAnalysisJob({
+      repo: "https://github.com/octocat/Hello-World",
+      commitLimit: 30,
+      jobStore: store,
+      autoStart: false
+    });
+
+    expect(job).toMatchObject({
+      repo: "https://github.com/octocat/Hello-World",
+      normalizedRepo: "octocat/Hello-World",
+      commitLimit: 30,
+      status: "queued"
+    });
+  });
+});
