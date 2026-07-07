@@ -3,6 +3,7 @@
 import { Github, Loader2, Play } from "lucide-react";
 import { useState } from "react";
 import { ALL_COMMITS_LIMIT, DEFAULT_COMMIT_LIMIT, SUPPORTED_COMMIT_LIMITS } from "@/lib/security/limits";
+import { useLanguage } from "./language";
 
 type RepoInputProps = {
   onSubmit: (repo: string, commitLimit: number) => void;
@@ -11,6 +12,7 @@ type RepoInputProps = {
 };
 
 export function RepoInput({ onSubmit, isLoading = false, initialRepo = "" }: RepoInputProps) {
+  const { t } = useLanguage();
   const [repo, setRepo] = useState(initialRepo);
   const [commitLimit, setCommitLimit] = useState<number>(DEFAULT_COMMIT_LIMIT);
 
@@ -23,7 +25,7 @@ export function RepoInput({ onSubmit, isLoading = false, initialRepo = "" }: Rep
       }}
     >
       <label className="text-xs font-semibold uppercase text-stone-400" htmlFor="repo-url">
-        Public GitHub repository
+        {t("publicRepo")}
       </label>
       <div className="grid gap-2">
         <div className="relative">
@@ -51,13 +53,13 @@ export function RepoInput({ onSubmit, isLoading = false, initialRepo = "" }: Rep
                 onClick={() => setCommitLimit(limit)}
                 disabled={isLoading}
               >
-                {limit === ALL_COMMITS_LIMIT ? "All" : limit}
+                {limit === ALL_COMMITS_LIMIT ? t("all") : limit}
               </button>
             ))}
           </div>
           <button
             type="submit"
-            aria-label="Generate repo movie"
+            aria-label={t("generateRepoMovie")}
             className="flex h-11 items-center justify-center rounded-[0.4rem] bg-amber-300 text-stone-950 transition hover:bg-amber-200 disabled:bg-stone-700 disabled:text-stone-400"
             disabled={isLoading || repo.trim().length === 0}
           >

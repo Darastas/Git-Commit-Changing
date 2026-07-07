@@ -11,9 +11,11 @@ import {
   type InterpolatedTrendPoint
 } from "@/lib/movie/trend";
 import type { MovieFile, RepoMovie } from "@/lib/movie/repo-movie-types";
+import { messages, type AppLanguage } from "./language";
 
 type CodeCityCanvasProps = {
   movie: RepoMovie;
+  language: AppLanguage;
   playheadProgress: number;
   curveStyle: ChartCurveStyle;
   colorTheme: ChartColorTheme;
@@ -42,6 +44,7 @@ type ChartPoint = {
 };
 
 type ChangedFile = CommitTrendPoint["changedFiles"][number];
+type CanvasCopy = Record<keyof typeof messages.en, string>;
 
 export type ChartCurveStyle = "smooth" | "linear" | "dash";
 export type ChartColorTheme = "geist" | "primer" | "linear" | "mono" | "sage";
@@ -527,7 +530,8 @@ function drawCursorAnnotation(
   layout: ChartLayout,
   cursor: { x: number; y: number },
   interpolated: InterpolatedTrendPoint,
-  palette: ChartPalette
+  palette: ChartPalette,
+  copy: CanvasCopy
 ) {
   const { chart, small } = layout;
   const boxWidth = clamp(chart.width * (small ? 0.76 : 0.42), small ? 148 : 220, small ? 216 : 320);
@@ -572,7 +576,7 @@ function drawCursorAnnotation(
   ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
   drawFitText(
     ctx,
-    `Commit #${formatWholeNumber(interpolated.cumulativeCommits)} · ${formatHudDate(activeCommit.date, small)}`,
+    `${copy.commit} #${formatWholeNumber(interpolated.cumulativeCommits)} · ${formatHudDate(activeCommit.date, small)}`,
     x + 12,
     y + (small ? 18 : 20),
     boxWidth - 22
@@ -580,7 +584,7 @@ function drawCursorAnnotation(
 
   ctx.font = `600 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = palette.starStops[2];
-  drawFitText(ctx, `${formatStars(interpolated.cumulativeStars)} stars`, x + 12, y + (small ? 35 : 40), boxWidth - 22);
+  drawFitText(ctx, `${formatStars(interpolated.cumulativeStars)} ${copy.stars}`, x + 12, y + (small ? 35 : 40), boxWidth - 22);
 
   ctx.font = `600 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(214, 211, 209, 0.78)";
@@ -643,7 +647,8 @@ function drawAxes(
   ctx: CanvasRenderingContext2D,
   layout: ChartLayout,
   palette: ChartPalette,
-  scales: DynamicTrendScales
+  scales: DynamicTrendScales,
+  copy: CanvasCopy
 ) {
   const { chart, small } = layout;
   const maxCommits = scales.commitMax;
@@ -726,11 +731,11 @@ function drawAxes(
   ctx.textBaseline = "alphabetic";
   ctx.font = `800 ${small ? 10 : 12}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(245, 245, 244, 0.9)";
-  ctx.fillText(small ? "Commits" : "Cumulative commits", chart.x, chart.y - 18);
+  ctx.fillText(small ? copy.commits : copy.cumulativeCommits, chart.x, chart.y - 18);
   if (!small) {
     ctx.font = `600 10px ${CANVAS_FONT_SANS}`;
     ctx.fillStyle = "rgba(214, 211, 209, 0.58)";
-    ctx.fillText("dates with commits", chart.x + 152, chart.y - 18);
+    ctx.fillText(copy.datesWithCommits, chart.x + 152, chart.y - 18);
   }
   if (maxStars > 0) {
     const legendX = chart.x + chart.width - (small ? 60 : 132);
@@ -741,7 +746,7 @@ function drawAxes(
     ctx.lineTo(legendX + 20, chart.y - 21);
     ctx.stroke();
     ctx.fillStyle = palette.starStops[2];
-    ctx.fillText(small ? "stars" : `stars scale ${formatStars(maxStars)}`, legendX + 26, chart.y - 18);
+    ctx.fillText(small ? copy.stars : `${copy.starScale} ${formatStars(maxStars)}`, legendX + 26, chart.y - 18);
   }
   ctx.restore();
 }
@@ -754,7 +759,8 @@ function drawTrendCurve(
   tempo: number,
   palette: ChartPalette,
   curveStyle: ChartCurveStyle,
-  scales: DynamicTrendScales
+  scales: DynamicTrendScales,
+  copy: CanvasCopy
 ) {
   const { chart } = layout;
   const interpolated = interpolateTrendPoint(points, progress);
@@ -885,7 +891,7 @@ function drawTrendCurve(
   }
 
   ctx.restore();
-  drawCursorAnnotation(ctx, layout, cursor, interpolated, palette);
+  drawCursorAnnotation(ctx, layout, cursor, interpolated, palette, copy);
   return interpolated;
 }
 
@@ -1084,7 +1090,8 @@ function drawChangedFilesList(
   width: number,
   maxY: number,
   small: boolean,
-  palette: ChartPalette
+  palette: ChartPalette,
+  copy: CanvasCopy
 ) {
   const rowHeight = small ? 26 : 30;
   const gap = small ? 5 : 6;
@@ -1096,7 +1103,7 @@ function drawChangedFilesList(
   const selectedChangedFile = files.find((file) => file.path === selectedPath) ?? files[0];
   ctx.font = `800 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(245, 245, 244, 0.86)";
-  ctx.fillText("Changed files", x, y);
+  ctx.fillText(copy.changedFiles, x, y);
   ctx.font = `700 ${small ? 10 : 11}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(168, 162, 158, 0.78)";
   ctx.textAlign = "right";
@@ -1136,7 +1143,7 @@ function drawChangedFilesList(
   if (hidden > 0 && y + 14 <= maxY) {
     ctx.font = `700 ${small ? 9 : 10}px ${CANVAS_FONT_SANS}`;
     ctx.fillStyle = "rgba(168, 162, 158, 0.68)";
-    ctx.fillText(`+${hidden} more`, x + 2, y + 8);
+    ctx.fillText(`+${hidden} ${copy.moreFiles}`, x + 2, y + 8);
   }
 
   return y;
@@ -1151,7 +1158,8 @@ function drawHud(
   progress: number,
   tempo: number,
   palette: ChartPalette,
-  avatarImages: Map<string, HTMLImageElement>
+  avatarImages: Map<string, HTMLImageElement>,
+  copy: CanvasCopy
 ) {
   const { hud, small } = layout;
   const padding = small ? 12 : 16;
@@ -1197,7 +1205,7 @@ function drawHud(
   y += avatarRadius * 2 + (small ? 18 : 24);
 
   const currentText = formatWholeNumber(current);
-  const totalText = `/ ${formatWholeNumber(total)} commits`;
+  const totalText = `/ ${formatWholeNumber(total)} ${copy.commits}`;
   const countBaseline = y + (small ? 24 : 32);
   setFittedFont(ctx, currentText, contentWidth, 900, small ? 28 : 36, small ? 20 : 26);
   ctx.fillStyle = "rgba(255, 251, 235, 0.98)";
@@ -1216,16 +1224,16 @@ function drawHud(
 
   ctx.font = `800 ${small ? 13 : 15}px ${CANVAS_FONT_SANS}`;
   ctx.fillStyle = "rgba(245, 245, 244, 0.92)";
-  wrapText(ctx, point.message || "Untitled commit", x, y, contentWidth, small ? 16 : 19, small ? 2 : 3);
+  wrapText(ctx, point.message || copy.untitledCommit, x, y, contentWidth, small ? 16 : 19, small ? 2 : 3);
   y += small ? 46 : 60;
 
   const columnGap = small ? 8 : 12;
   const metricWidth = (contentWidth - columnGap) / 2;
-  drawHudMetric(ctx, "Date", formatHudDate(point.date, small), x, y, metricWidth);
-  drawHudMetric(ctx, "Files", String(point.changedFiles.length), x + metricWidth + columnGap, y, metricWidth);
+  drawHudMetric(ctx, copy.date, formatHudDate(point.date, small), x, y, metricWidth);
+  drawHudMetric(ctx, copy.files, String(point.changedFiles.length), x + metricWidth + columnGap, y, metricWidth);
   y += small ? 36 : 50;
-  drawHudMetric(ctx, "Delta", small ? `+${point.additions}/-${point.deletions}` : `+${point.additions} / -${point.deletions}`, x, y, metricWidth);
-  drawHudMetric(ctx, "Stars", formatStars(point.cumulativeStars), x + metricWidth + columnGap, y, metricWidth);
+  drawHudMetric(ctx, copy.delta, small ? `+${point.additions}/-${point.deletions}` : `+${point.additions} / -${point.deletions}`, x, y, metricWidth);
+  drawHudMetric(ctx, copy.stars, formatStars(point.cumulativeStars), x + metricWidth + columnGap, y, metricWidth);
   y += small ? 38 : 56;
 
   if (y < hud.y + hud.height - 92) {
@@ -1240,23 +1248,23 @@ function drawHud(
 
   const fileListY =
     point.changedFiles.length > 0 ? Math.min(y, hud.y + hud.height - (small ? 76 : 124)) : y;
-  drawChangedFilesList(ctx, point.changedFiles, selectedFile?.path, x, fileListY, contentWidth, hud.y + hud.height - 14, small, palette);
+  drawChangedFilesList(ctx, point.changedFiles, selectedFile?.path, x, fileListY, contentWidth, hud.y + hud.height - 14, small, palette, copy);
 
   ctx.restore();
 }
 
-function drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number) {
+function drawEmptyState(ctx: CanvasRenderingContext2D, width: number, height: number, copy: CanvasCopy) {
   drawBackground(ctx, width, height, 0, CHART_PALETTES.geist);
   ctx.save();
   ctx.fillStyle = "rgba(245, 245, 244, 0.86)";
   ctx.font = `800 16px ${CANVAS_FONT_SANS}`;
   ctx.textAlign = "center";
-  ctx.fillText("No commit data available", width / 2, height / 2);
+  ctx.fillText(copy.noCommitData, width / 2, height / 2);
   ctx.restore();
 }
 
 export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>(function CodeCityCanvas(
-  { movie, playheadProgress, curveStyle, colorTheme, selectedPath, onSelectFile },
+  { movie, language, playheadProgress, curveStyle, colorTheme, selectedPath, onSelectFile },
   forwardedRef
 ) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1264,6 +1272,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
   useImperativeHandle(forwardedRef, () => canvasRef.current as HTMLCanvasElement);
   const trend = useMemo(() => buildCommitTrend(movie), [movie]);
   const palette = CHART_PALETTES[colorTheme];
+  const copy = messages[language];
   const selectedFile = selectedPath ? movie.files[selectedPath] : undefined;
 
   useEffect(() => {
@@ -1316,7 +1325,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
       ctx.clearRect(0, 0, width, height);
 
       if (trend.length === 0) {
-        drawEmptyState(ctx, width, height);
+        drawEmptyState(ctx, width, height, copy);
         animationFrame = window.requestAnimationFrame(draw);
         return;
       }
@@ -1327,10 +1336,10 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
       const activePoint = nearestTrendPoint(trend, progress) ?? trend[0];
 
       drawBackground(ctx, width, height, tempo, palette);
-      drawAxes(ctx, layout, palette, scales);
+      drawAxes(ctx, layout, palette, scales, copy);
       drawStarTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle, scales);
-      drawTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle, scales);
-      drawHud(ctx, layout, movie, activePoint, selectedFile, progress, tempo, palette, avatarImagesRef.current);
+      drawTrendCurve(ctx, layout, trend, progress, tempo, palette, curveStyle, scales, copy);
+      drawHud(ctx, layout, movie, activePoint, selectedFile, progress, tempo, palette, avatarImagesRef.current, copy);
 
       ctx.save();
       ctx.font = `700 11px ${CANVAS_FONT_SANS}`;
@@ -1343,7 +1352,7 @@ export const CodeCityCanvas = forwardRef<HTMLCanvasElement, CodeCityCanvasProps>
 
     draw(performance.now());
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [movie, playheadProgress, selectedFile, trend, palette, curveStyle]);
+  }, [copy, movie, playheadProgress, selectedFile, trend, palette, curveStyle]);
 
   return (
     <canvas

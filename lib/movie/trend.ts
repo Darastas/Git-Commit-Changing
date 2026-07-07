@@ -33,6 +33,7 @@ export type ContinuousProgressInput = {
   speed: number;
   playing: boolean;
   durationMs: number;
+  loop?: boolean;
 };
 
 export type DynamicTrendScales = {
@@ -81,8 +82,51 @@ function dynamicTimeEnd(timeStart: number, finalTimeEnd: number, activeTimestamp
   return timeStart + visibleSpan;
 }
 
+function starHistoryPoints(movie: RepoMovie) {
+  return (movie.repo.starHistory?.points ?? [])
+    .map((point) => ({
+      timestamp: toTimestamp(point.starredAt, Number.NaN),
+      cumulativeStars: Math.max(0, point.cumulativeStars)
+    }))
+    .filter((point) => Number.isFinite(point.timestamp))
+    .sort((a, b) => a.timestamp - b.timestamp || a.cumulativeStars - b.cumulativeStars);
+}
+
+function historicalStarsAt(
+  timestamp: number,
+  points: ReturnType<typeof starHistoryPoints>,
+  complete: boolean
+) {
+  if (points.length === 0) {
+    return undefined;
+  }
+
+  if (timestamp < points[0].timestamp) {
+    return complete ? 0 : points[0].cumulativeStars;
+  }
+
+  let left = points[0];
+  for (let index = 1; index < points.length; index += 1) {
+    const right = points[index];
+    if (right.timestamp > timestamp) {
+      if (complete) {
+        return left.cumulativeStars;
+      }
+
+      const span = Math.max(1, right.timestamp - left.timestamp);
+      return Math.round(lerp(left.cumulativeStars, right.cumulativeStars, (timestamp - left.timestamp) / span));
+    }
+    left = right;
+  }
+
+  return left.cumulativeStars;
+}
+
 export function buildCommitTrend(movie: RepoMovie): CommitTrendPoint[] {
   const totalStars = Math.max(0, movie.repo.stars ?? 0);
+  const historyPoints = starHistoryPoints(movie);
+  const hasStarHistory = historyPoints.length > 0;
+  const completeStarHistory = movie.repo.starHistory?.complete ?? false;
   const ordered = movie.commits
     .map((commit, originalIndex) => ({
       commit,
@@ -103,7 +147,11 @@ export function buildCommitTrend(movie: RepoMovie): CommitTrendPoint[] {
       timestamp,
       cumulativeCommits: index + 1,
       cumulativeStars:
-        index === pointCount - 1 ? totalStars : Math.round(totalStars * Math.pow((index + 1) / pointCount, 1.22)),
+        hasStarHistory
+          ? historicalStarsAt(timestamp, historyPoints, completeStarHistory) ?? 0
+          : index === pointCount - 1
+            ? totalStars
+            : Math.round(totalStars * Math.pow((index + 1) / pointCount, 1.22)),
       additions: commit.additions,
       deletions: commit.deletions,
       changedFiles: commit.changedFiles
@@ -152,7 +200,8 @@ export function advanceTrendProgress({
   deltaMs,
   speed,
   playing,
-  durationMs
+  durationMs,
+  loop
 }: ContinuousProgressInput): number {
   const normalized = clamp(currentProgress, 0, 1);
   if (!playing) {
@@ -166,7 +215,10 @@ export function advanceTrendProgress({
   }
 
   const next = normalized + delta;
-  return next >= 1 ? next % 1 : next;
+  if (next >= 1) {
+    return loop === false ? 1 : next % 1;
+  }
+  return next;
 }
 
 export function nearestTrendPoint(points: CommitTrendPoint[], progress: number): CommitTrendPoint | undefined {

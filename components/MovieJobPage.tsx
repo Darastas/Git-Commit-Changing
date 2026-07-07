@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { AnalysisJob } from "@/lib/jobs/job-types";
 import type { RepoMovie } from "@/lib/movie/repo-movie-types";
 import { JobStatus } from "./JobStatus";
+import { LanguageProvider } from "./language";
 import { MoviePlayer } from "./MoviePlayer";
 
 type MovieJobPageProps = {
@@ -19,6 +20,14 @@ async function readApi<T>(response: Response): Promise<T> {
 }
 
 export function MovieJobPage({ jobId }: MovieJobPageProps) {
+  return (
+    <LanguageProvider>
+      <MovieJobPageContent jobId={jobId} />
+    </LanguageProvider>
+  );
+}
+
+function MovieJobPageContent({ jobId }: MovieJobPageProps) {
   const [job, setJob] = useState<AnalysisJob | undefined>();
   const [movie, setMovie] = useState<RepoMovie | undefined>();
   const [error, setError] = useState<string | undefined>();

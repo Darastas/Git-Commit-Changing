@@ -246,6 +246,36 @@ describe("mapGitHubError", () => {
     expect(calls[1]).toContain("page=2");
   });
 
+  it("fetches repository stargazer history with GitHub starred_at timestamps", async () => {
+    const calls: string[] = [];
+    const acceptHeaders: string[] = [];
+    const client = new GitHubClient({
+      fetchImpl: async (input, init) => {
+        calls.push(String(input));
+        acceptHeaders.push((init?.headers as Record<string, string>).Accept);
+        return Response.json([
+          { starred_at: "2024-02-29T00:00:00Z", user: { login: "first" } },
+          { starred_at: "2024-03-02T09:00:00Z", user: { login: "second" } }
+        ]);
+      }
+    });
+
+    const history = await client.getStargazerHistory("octocat", "Hello-World", 2);
+
+    expect(calls).toEqual([
+      "https://api.github.com/repos/octocat/Hello-World/stargazers?per_page=100&page=1"
+    ]);
+    expect(acceptHeaders).toEqual(["application/vnd.github.star+json"]);
+    expect(history).toEqual({
+      source: "github-stargazers",
+      complete: true,
+      points: [
+        { starredAt: "2024-02-29T00:00:00Z", cumulativeStars: 1 },
+        { starredAt: "2024-03-02T09:00:00Z", cumulativeStars: 2 }
+      ]
+    });
+  });
+
   it("maps rate-limit responses to a retryable user-facing error", () => {
     const mapped = mapGitHubError(
       new Response("rate limited", {

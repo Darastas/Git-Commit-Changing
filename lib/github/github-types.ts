@@ -19,6 +19,17 @@ export type GitHubRepoMetadata = {
   archived: boolean;
 };
 
+export type GitHubStarHistoryPoint = {
+  starredAt: string;
+  cumulativeStars: number;
+};
+
+export type GitHubStarHistory = {
+  source: "github-stargazers";
+  complete: boolean;
+  points: GitHubStarHistoryPoint[];
+};
+
 export type GitHubCommitAuthor = {
   name?: string;
   date?: string;

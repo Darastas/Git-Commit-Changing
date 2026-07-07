@@ -3,6 +3,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { MoviePlayer } from "@/components/MoviePlayer";
+import { LanguageProvider } from "@/components/language";
 import { sampleMovie } from "@/lib/movie/sample-data";
 
 beforeAll(() => {
@@ -35,8 +36,37 @@ beforeAll(() => {
 });
 
 describe("MoviePlayer", () => {
+  function renderPlayer() {
+    return render(
+      <LanguageProvider>
+        <MoviePlayer movie={sampleMovie} />
+      </LanguageProvider>
+    );
+  }
+
+  function renderShareablePlayer() {
+    return render(
+      <LanguageProvider>
+        <MoviePlayer movie={sampleMovie} jobId="job-123" />
+      </LanguageProvider>
+    );
+  }
+
+  it("switches core player labels between English and Chinese", () => {
+    renderPlayer();
+
+    expect(screen.getByLabelText("Language")).toBeTruthy();
+    expect(screen.getByText("Changed files")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Chinese" }));
+
+    expect(screen.getByText("变更文件")).toBeTruthy();
+    expect(screen.getByLabelText("电影时间线")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "切换到英文" })).toBeTruthy();
+  });
+
   it("renders the playable commit trend workspace controls for a movie", () => {
-    render(<MoviePlayer movie={sampleMovie} />);
+    renderPlayer();
 
     expect(screen.getByText("demo/signal-studio")).toBeTruthy();
     expect(screen.getByLabelText("Pause movie")).toBeTruthy();
@@ -50,7 +80,7 @@ describe("MoviePlayer", () => {
   });
 
   it("uses the right rail for author identity and commit annotations", () => {
-    render(<MoviePlayer movie={sampleMovie} />);
+    renderPlayer();
 
     expect(screen.getByText("Commit trail")).toBeTruthy();
     expect(screen.getByText("@mina")).toBeTruthy();
@@ -64,7 +94,7 @@ describe("MoviePlayer", () => {
       clipboard: { writeText }
     });
 
-    render(<MoviePlayer movie={sampleMovie} jobId="job-123" />);
+    renderShareablePlayer();
 
     fireEvent.click(screen.getByText("Share"));
 
@@ -78,7 +108,7 @@ describe("MoviePlayer", () => {
       clipboard: { writeText }
     });
 
-    render(<MoviePlayer movie={sampleMovie} jobId="job-123" />);
+    renderShareablePlayer();
 
     fireEvent.click(screen.getByText("Share"));
 

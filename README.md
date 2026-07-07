@@ -1,40 +1,32 @@
 # Repo Movie Machine
 
-Repo Movie Machine is a compact creative developer tool that turns a public GitHub repository into a playable commit trend movie. Users paste a repository URL, the server fetches recent GitHub commit history, the analyzer builds a durable `RepoMovie` JSON model, and the browser renders an animated cumulative commit timeline.
+[中文文档](./README.zh-CN.md)
 
-## What Works
+## Product Introduction
 
-- Public GitHub repo input in these forms:
-  - `https://github.com/owner/repo`
-  - `http://github.com/owner/repo`
-  - `github.com/owner/repo`
-  - `owner/repo`
-- Server-side GitHub API analyzer with optional `GITHUB_TOKEN`.
-- Low-rate summary mode when `GITHUB_TOKEN` is not set, so unauthenticated runs do not fan out into one request per commit.
-- Async job abstraction with in-memory queue/store.
-- Movie cache keyed by provider, owner, repo, branch, latest SHA, and commit limit.
-- Commit limits: 30, 100, 250, 500, or All. Default: 100.
-- 2D commit trend player:
-  - x-axis dates with commits
-  - left y-axis cumulative commit count
-  - right y-axis estimated star count
-  - continuously moving curve reveal
-  - adaptive x/y chart scaling so early growth remains visible on long histories
-  - live curve-head label with commit number, date, message, and stars
-  - estimated star trend mapped from the repository's current GitHub star total
-  - in-canvas author, date, stars, SHA, file count, and delta HUD
-  - language colors and file inspection context
-  - play, pause, scrub, speed, jump start/end
-  - commit panel and file inspector
-- Shareable local movie route: `/movie/[jobId]`.
-- Query loading: `/?repo=owner/repo`.
-- Export:
-  - `RepoMovie` JSON
-  - PNG canvas snapshot
-  - browser-side WebM recording when the browser supports `MediaRecorder`
-- Tests for URL parsing, language inference, parser transformations, cache keys, error mapping, job storage, limits, and layout.
+Repo Movie Machine is a compact creative developer tool that turns a public GitHub repository into a playable commit and star trend movie.
 
-## Local Setup
+Users paste a GitHub repository such as `owner/repo`, the server fetches repository metadata and commit history, the analyzer builds a reusable `RepoMovie` JSON model, and the browser renders an animated timeline with commit count, historical stars, current commit details, changed files, sharing, and export controls.
+
+Current capabilities:
+
+- Public GitHub repository input in these forms: `https://github.com/owner/repo`, `github.com/owner/repo`, or `owner/repo`.
+- Commit limits: `30`, `100`, `250`, `500`, or `All`. Default: `100`.
+- Server-side GitHub API access with optional `GITHUB_TOKEN`; tokens are never exposed to browser code.
+- Summary mode without a token, so larger histories can still load under low unauthenticated API limits.
+- Real GitHub stargazer timeline when `GITHUB_TOKEN` is available, with estimated star-trend fallback.
+- Bilingual English/Chinese UI with an in-page language switch.
+- Shareable local movie route, query loading, JSON export, PNG snapshot export, and browser-side WebM recording.
+
+## Local Deployment Tutorial
+
+Requirements:
+
+- Node.js 20+
+- npm
+- Optional GitHub token for higher API limits and historical star data
+
+Install and run locally:
 
 ```bash
 npm install
@@ -43,119 +35,75 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The app includes a sample movie, so the player works before a live repository is loaded.
-
-## GitHub Token
-
-`GITHUB_TOKEN` is optional but recommended. Without it, GitHub's unauthenticated API rate limits are much lower, so the app uses summary mode: it fetches repository metadata and the commit list, then generates timeline activity files without per-file commit details. This keeps larger 250, 500, or All commit movies usable on the low unauthenticated quota.
-
-With `GITHUB_TOKEN` set, the analyzer fetches per-commit file details server-side for finite limits up to 500 and produces richer commit and file metadata for the trend HUD. If the token is rate-limited during detail fetching, the job falls back to summary mode instead of failing the whole movie. The All option intentionally stays in summary mode so full-history timelines do not fan out into thousands of per-commit detail requests.
-
-Create `.env.local`:
+Optional `.env.local`:
 
 ```bash
 GITHUB_TOKEN=github_pat_or_classic_token_here
 ```
 
-The token is only read inside server-side route/worker code. It is never serialized into browser props and is not used by client components.
-
-Token permissions for public repositories can be minimal. A fine-grained token with public repository metadata access is enough for this MVP.
-
-## Verification
+Validate the project:
 
 ```bash
 npm run lint
 npm run typecheck
 npm run test
+npm run test:e2e
 npm run build
 ```
 
-Manual targets:
+For production hosting, Vercel is the simplest target for the current Next.js app. Set `GITHUB_TOKEN` in project environment variables, then use `npm run build`. The current job and movie stores are in memory, so durable storage such as Redis, Vercel KV, Upstash, Postgres, Cloudflare KV, D1, or Durable Objects is recommended before relying on persistent public share links.
+
+## Web Usage
+
+1. Enter a public GitHub repository in the left panel.
+2. Choose a commit limit. Start with `30` or `100` for very large repositories.
+3. Press the play button to generate the movie.
+4. Use play/pause, jump, speed, curve style, theme, and the timeline scrubber to inspect the animation.
+5. Click the language control to switch between English and Chinese.
+6. Click commits in the trail or files in the visualization to inspect the current change context.
+7. Export the `RepoMovie` JSON, save a PNG snapshot, record a WebM clip, or copy the share link when a generated movie is loaded.
+
+Useful manual targets:
 
 - `octocat/Hello-World`
 - `vercel/next.js` with 30 commits first
-- invalid input such as `https://example.com/a/b`
-- missing repo such as `octocat/does-not-exist-repo`
-- no `GITHUB_TOKEN`
-- with `GITHUB_TOKEN`
-- desktop viewport
-- mobile viewport
+- Invalid input such as `https://example.com/a/b`
+- Missing repo such as `octocat/does-not-exist-repo`
+- No `GITHUB_TOKEN`
+- With `GITHUB_TOKEN`
+- Desktop and mobile viewports
 
-## Deployment
+## Simple Technical Notes
 
-### Vercel
+The app uses Next.js App Router, TypeScript, React, Tailwind CSS, Canvas, lucide-react, Vitest, and Playwright.
 
-Vercel is the simplest deployment target for the current Next.js App Router app.
-
-1. Push the repository to GitHub.
-2. Import it in Vercel.
-3. Set `GITHUB_TOKEN` in Project Settings → Environment Variables.
-4. Build command: `npm run build`.
-5. Output is handled by Next.js automatically.
-
-Important: the current job store and movie storage are in-memory. They work for local development and a single warm server process, but serverless instances can evict memory. For production sharing, replace the adapters in `lib/jobs` and `lib/storage` with Redis, Vercel KV, Upstash, Postgres, or another durable store.
-
-### Cloudflare Pages
-
-Cloudflare Pages can host the app with a Next.js adapter such as OpenNext for Cloudflare.
-
-Recommended path:
-
-1. Use the Cloudflare/OpenNext adapter for Next.js App Router.
-2. Set `GITHUB_TOKEN` as an encrypted environment variable.
-3. Replace in-memory job/movie storage with Cloudflare KV, D1, or Durable Objects.
-4. Move long-running analysis into a Worker queue when analyzing larger repositories.
-
-The API-based analyzer is serverless-friendly because it uses the GitHub API instead of local `git clone`.
-
-## Architecture
+High-level structure:
 
 ```text
-app/
-  page.tsx
-  movie/[jobId]/page.tsx
-  api/jobs
-  api/movies
-components/
-  RepoInput.tsx
-  JobStatus.tsx
-  MoviePlayer.tsx
-  CodeCityCanvas.tsx
-  Timeline.tsx
-  CommitPanel.tsx
-  FileInspector.tsx
-  ExampleGallery.tsx
-lib/
-  github/
-  jobs/
-  movie/
-  storage/
-  security/
-worker/
-  analyze-job.ts
-tests/
-  fixtures/
+app/                  routes and API endpoints
+components/           workspace, player, canvas, panels, bilingual UI
+lib/github/           GitHub URL parsing and REST API client
+lib/jobs/             in-memory job queue/store and cache keys
+lib/movie/            RepoMovie model, parser, trend math, recording helpers
+lib/storage/          in-memory movie storage
+lib/security/         input limits and cooldowns
+worker/               async analysis workflow
+tests/                unit, component, and e2e coverage
 ```
 
-Boundaries are intentionally separate: GitHub access, validation, job management, storage, parser/model generation, layout, and rendering are isolated so each can be replaced independently.
-
-## Limitations
+Important limitations:
 
 - Jobs and movie artifacts are stored in process memory.
 - Share links survive only while the same server process keeps the in-memory result.
-- Without `GITHUB_TOKEN`, generated movies use commit-list summaries and synthetic `.repo/activity/*` files rather than exact changed files.
-- With `GITHUB_TOKEN`, commit details are fetched sequentially to stay simple and gentle on GitHub rate limits.
-- The analyzer uses recent GitHub API commits only; it does not clone full repository history.
-- Star history is currently estimated from the repository's current star count and commit timeline. Exact historical starring events require an additional GitHub stargazers timeline fetch.
-- Very large repositories should use the 30 or 100 commit setting first, then move up to 250, 500, or All once the repo loads cleanly. All may require many GitHub commit-list pages on repositories with very long histories.
+- Without `GITHUB_TOKEN`, movies use commit-list summaries and synthetic `.repo/activity/*` files rather than exact per-file commit details.
+- The analyzer uses the GitHub API only; it does not clone repositories.
+- Very large repositories may require many commit-list pages in `All` mode.
 - MP4 export is not included. WebM is browser-side only.
 
-## Production Upgrade Roadmap
+Recommended next upgrades:
 
 - Durable job and movie storage.
-- Worker-backed analyzer with queue retries and cancellation.
+- Worker-backed analysis with queue retries and cancellation.
 - Optional clone-based analyzer for richer full-history timelines.
-- Persistent public movie slugs independent of job IDs.
+- Persistent public movie slugs independent of in-memory job IDs.
 - Server-side render/export pipeline for MP4.
-- Better contributor and directory-level filtering.
-- Abuse controls backed by durable rate limiting.

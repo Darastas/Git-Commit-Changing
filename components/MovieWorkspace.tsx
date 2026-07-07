@@ -8,6 +8,7 @@ import { sampleMovie } from "@/lib/movie/sample-data";
 import { DEFAULT_COMMIT_LIMIT } from "@/lib/security/limits";
 import { ExampleGallery } from "./ExampleGallery";
 import { JobStatus } from "./JobStatus";
+import { LanguageProvider, useLanguage } from "./language";
 import { MoviePlayer } from "./MoviePlayer";
 import { RepoInput } from "./RepoInput";
 
@@ -20,6 +21,15 @@ async function readApi<T>(response: Response): Promise<T> {
 }
 
 export function MovieWorkspace() {
+  return (
+    <LanguageProvider>
+      <MovieWorkspaceContent />
+    </LanguageProvider>
+  );
+}
+
+function MovieWorkspaceContent() {
+  const { t } = useLanguage();
   const searchParams = useSearchParams();
   const initialRepo = searchParams.get("repo") ?? "";
   const autoStarted = useRef(false);
@@ -112,7 +122,7 @@ export function MovieWorkspace() {
             <div className="mb-4">
               <p className="font-mono text-[0.68rem] uppercase text-amber-300">Repo Movie Machine</p>
               <h2 className="mt-2 text-xl font-semibold leading-tight text-stone-50">
-                Turn commits into a live trend movie.
+                {t("tagLine")}
               </h2>
             </div>
           <RepoInput onSubmit={startJob} isLoading={loading} initialRepo={initialRepo} />
@@ -125,15 +135,15 @@ export function MovieWorkspace() {
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
               <p className="font-mono text-lg font-semibold text-stone-50">{visibleMovie.stats.totalCommits}</p>
-              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">commits</p>
+              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">{t("commits")}</p>
             </div>
             <div>
               <p className="font-mono text-lg font-semibold text-stone-50">{visibleMovie.stats.activeFiles}</p>
-              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">active</p>
+              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">{t("active")}</p>
             </div>
             <div>
               <p className="font-mono text-lg font-semibold text-stone-50">{visibleMovie.directories.length}</p>
-              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">paths</p>
+              <p className="mt-0.5 text-[0.65rem] uppercase text-stone-500">{t("paths")}</p>
             </div>
           </div>
           <div className="mt-4 grid gap-2">
@@ -147,7 +157,7 @@ export function MovieWorkspace() {
           </div>
         </section>
         <section className="rounded-[0.45rem] border border-stone-800/80 bg-[#0d0f0c]/60 p-4 text-xs leading-5 text-stone-400">
-          Server-only GitHub access. No token is exposed to the browser.
+          {t("serverOnly")}
         </section>
       </aside>
       <MoviePlayer key={`${visibleMovie.repo.fullName}:${visibleMovie.repo.latestSha}`} movie={visibleMovie} jobId={movie ? job?.id : undefined} />

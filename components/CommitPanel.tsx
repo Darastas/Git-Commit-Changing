@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Calendar, Files } from "lucide-react";
 import type { MovieCommit } from "@/lib/movie/repo-movie-types";
+import { useLanguage, type MessageKey } from "./language";
 
 type CommitPanelProps = {
   commits: MovieCommit[];
@@ -16,11 +17,11 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function formatCommitDate(value: string) {
+function formatCommitDate(value: string, unknownDate: string) {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return { date: "Unknown date", time: "--:--" };
+    return { date: unknownDate, time: "--:--" };
   }
 
   const pad = (part: number) => String(part).padStart(2, "0");
@@ -47,14 +48,31 @@ function statusClasses(status: string) {
   return "border-sky-300/25 bg-sky-400/10 text-sky-200";
 }
 
+function statusLabel(status: string): MessageKey {
+  if (status === "added") {
+    return "statusAdded";
+  }
+
+  if (status === "removed") {
+    return "statusRemoved";
+  }
+
+  if (status === "renamed") {
+    return "statusRenamed";
+  }
+
+  return "statusModified";
+}
+
 export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPanelProps) {
+  const { t } = useLanguage();
   const commit = commits[Math.min(currentIndex, commits.length - 1)] ?? commits[0];
 
   if (!commit) {
     return null;
   }
 
-  const currentDate = formatCommitDate(commit.date);
+  const currentDate = formatCommitDate(commit.date, t("unknownDate"));
   const authorHandle = commit.authorLogin ? `@${commit.authorLogin}` : commit.authorName;
   const visibleFiles = commit.changedFiles.slice(0, 5);
   const hiddenFileCount = Math.max(0, commit.changedFiles.length - visibleFiles.length);
@@ -103,11 +121,11 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
             <span className="font-mono">{commit.shortSha}</span>
           </div>
           <div className="rounded-[0.35rem] border border-emerald-300/20 bg-emerald-400/10 px-2 py-2 text-emerald-200">
-            <span className="block text-[0.65rem] uppercase text-emerald-300/70">add</span>
+            <span className="block text-[0.65rem] uppercase text-emerald-300/70">{t("additions")}</span>
             <span>+{commit.additions}</span>
           </div>
           <div className="rounded-[0.35rem] border border-red-300/20 bg-red-400/10 px-2 py-2 text-red-200">
-            <span className="block text-[0.65rem] uppercase text-red-300/70">del</span>
+            <span className="block text-[0.65rem] uppercase text-red-300/70">{t("deletions")}</span>
             <span>-{commit.deletions}</span>
           </div>
         </div>
@@ -117,7 +135,7 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
         <div className="mb-2 flex items-center justify-between gap-3 text-xs uppercase text-stone-500">
           <span className="inline-flex items-center gap-2">
             <Files className="h-3.5 w-3.5 text-amber-300" />
-            Changed files
+            {t("changedFiles")}
           </span>
           <span>{commit.changedFiles.length}</span>
         </div>
@@ -128,7 +146,7 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
               className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-[0.35rem] border border-stone-800 bg-[#090b0a]/68 px-2.5 py-2 text-xs"
             >
               <span className={`rounded-[0.25rem] border px-1.5 py-0.5 text-[0.65rem] ${statusClasses(file.status)}`}>
-                {file.status}
+                {t(statusLabel(file.status))}
               </span>
               <span className="truncate font-mono text-stone-300">{file.path}</span>
               <span className="text-stone-500">+/-{file.changes}</span>
@@ -136,7 +154,7 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
           ))}
           {hiddenFileCount > 0 ? (
             <div className="rounded-[0.35rem] border border-stone-800 bg-[#090b0a]/46 px-2.5 py-2 text-xs text-stone-500">
-              +{hiddenFileCount} more files
+              +{hiddenFileCount} {t("moreFiles")}
             </div>
           ) : null}
         </div>
@@ -144,24 +162,24 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
 
       <div className="mt-5">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="text-xs font-semibold uppercase text-stone-400">Commit trail</h2>
+          <h2 className="text-xs font-semibold uppercase text-stone-400">{t("commitTrail")}</h2>
           <span className="text-xs text-stone-500">
             {commits.length > visibleTrailCommits.length
-              ? `${trailStart + 1}-${trailEnd} of ${commits.length}`
-              : `${commits.length} commits`}
+              ? `${trailStart + 1}-${trailEnd} ${t("of")} ${commits.length}`
+              : `${commits.length} ${t("commits")}`}
           </span>
         </div>
         <div className="grid gap-2">
           {visibleTrailCommits.map((trailCommit, trailOffset) => {
             const trailIndex = trailStart + trailOffset;
-            const trailDate = formatCommitDate(trailCommit.date);
+            const trailDate = formatCommitDate(trailCommit.date, t("unknownDate"));
             const isCurrent = trailIndex === currentIndex;
 
             return (
               <button
                 key={trailCommit.sha}
                 type="button"
-                aria-label={`Jump to commit ${trailIndex + 1}: ${trailCommit.message}`}
+                aria-label={`${t("jumpToCommit")} ${trailIndex + 1}: ${trailCommit.message}`}
                 className={`grid grid-cols-[1.2rem_minmax(0,1fr)] gap-2 rounded-[0.4rem] border px-2.5 py-2 text-left transition ${
                   isCurrent
                     ? "border-amber-300/55 bg-amber-300/12 shadow-[0_0_24px_rgba(250,204,21,0.08)]"
@@ -185,7 +203,7 @@ export function CommitPanel({ commits, currentIndex, onSelectCommit }: CommitPan
                       {trailDate.date}
                     </span>
                     <span>{trailCommit.authorName}</span>
-                    <span>{trailCommit.changedFiles.length} files</span>
+                    <span>{trailCommit.changedFiles.length} {t("files")}</span>
                     <span className="text-emerald-300">+{trailCommit.additions}</span>
                     <span className="text-red-300">-{trailCommit.deletions}</span>
                   </span>

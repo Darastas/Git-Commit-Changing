@@ -84,6 +84,29 @@ describe("buildCommitTrend", () => {
     expect(trend.at(-1)?.cumulativeStars).toBe(movie.repo.stars);
   });
 
+  it("uses fetched GitHub star history at each commit date when it is available", () => {
+    const movie = buildRepoMovieFromGitHub({
+      repo: { ...repo, stars: 100 },
+      commitLimit: 30,
+      commits: commitDetails as GitHubCommitDetail[],
+      starHistory: {
+        source: "github-stargazers",
+        complete: true,
+        points: [
+          { starredAt: "2024-02-29T00:00:00Z", cumulativeStars: 2 },
+          { starredAt: "2024-03-01T12:00:00Z", cumulativeStars: 5 },
+          { starredAt: "2024-03-02T09:00:00Z", cumulativeStars: 9 },
+          { starredAt: "2024-03-03T00:00:00Z", cumulativeStars: 100 }
+        ]
+      }
+    });
+
+    const trend = buildCommitTrend(movie);
+
+    expect(trend.map((point) => point.cumulativeStars)).toEqual([2, 9]);
+    expect(trend.at(-1)?.cumulativeStars).not.toBe(movie.repo.stars);
+  });
+
   it("advances playback progress continuously without frame-boundary jumps", () => {
     const beforeBoundary = advanceTrendProgress({
       currentProgress: 0.249,
@@ -102,6 +125,19 @@ describe("buildCommitTrend", () => {
 
     expect(afterBoundary).toBeGreaterThan(beforeBoundary);
     expect(afterBoundary - beforeBoundary).toBeLessThan(0.01);
+  });
+
+  it("can clamp playback at the end for finite recording exports", () => {
+    const progress = advanceTrendProgress({
+      currentProgress: 0.99,
+      deltaMs: 1000,
+      speed: 1,
+      playing: true,
+      durationMs: 1000,
+      loop: false
+    });
+
+    expect(progress).toBe(1);
   });
 
   it("expands chart scales as the playback reaches larger history totals", () => {

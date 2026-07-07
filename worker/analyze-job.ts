@@ -1,4 +1,5 @@
 import { GitHubClient, GitHubClientError } from "@/lib/github/github-client";
+import type { GitHubStarHistory } from "@/lib/github/github-types";
 import { normalizeGitHubRepoInput } from "@/lib/github/github-url";
 import { buildMovieCacheKey } from "@/lib/jobs/cache-key";
 import { getJobStore } from "@/lib/jobs/in-memory-job-store";
@@ -40,6 +41,10 @@ function canFallBackToCommitSummaries(error: unknown) {
 
 function shouldFetchCommitDetails(commitLimit: number) {
   return hasGitHubToken() && commitLimit !== ALL_COMMITS_LIMIT && commitLimit <= 500;
+}
+
+function shouldFetchStargazerHistory(stars?: number) {
+  return hasGitHubToken() && typeof stars === "number" && stars > 0;
 }
 
 export async function analyzeJob(jobId: string) {
@@ -127,6 +132,17 @@ export async function analyzeJob(jobId: string) {
       progressPercent: 70
     });
 
+    let starHistory: GitHubStarHistory | undefined;
+    if (shouldFetchStargazerHistory(repo.stars)) {
+      try {
+        starHistory = await client.getStargazerHistory(repo.owner, repo.name, repo.stars);
+      } catch (error) {
+        if (!(error instanceof GitHubClientError)) {
+          throw error;
+        }
+      }
+    }
+
     await jobStore.update(job.id, {
       progressStage: "analyzing-changes",
       progressPercent: 78
@@ -134,7 +150,8 @@ export async function analyzeJob(jobId: string) {
     const movie = buildRepoMovieFromGitHub({
       repo,
       commits,
-      commitLimit: job.commitLimit
+      commitLimit: job.commitLimit,
+      starHistory
     });
 
     await jobStore.update(job.id, {

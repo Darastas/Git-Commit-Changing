@@ -1,4 +1,9 @@
-import type { GitHubChangedFile, GitHubCommitDetail, GitHubRepoMetadata } from "@/lib/github/github-types";
+import type {
+  GitHubChangedFile,
+  GitHubCommitDetail,
+  GitHubRepoMetadata,
+  GitHubStarHistory
+} from "@/lib/github/github-types";
 import { inferLanguage } from "./language";
 import type {
   MovieChangeEvent,
@@ -14,6 +19,7 @@ type BuildRepoMovieInput = {
   repo: GitHubRepoMetadata;
   commits: GitHubCommitDetail[];
   commitLimit: number;
+  starHistory?: GitHubStarHistory;
 };
 
 function clamp01(value: number) {
@@ -317,6 +323,7 @@ export function buildRepoMovieFromGitHub(input: BuildRepoMovieInput): RepoMovie 
       latestSha: input.repo.latestSha,
       description: input.repo.description,
       stars: input.repo.stars,
+      starHistory: input.starHistory,
       primaryLanguage: input.repo.primaryLanguage
     },
     generatedAt: new Date().toISOString(),

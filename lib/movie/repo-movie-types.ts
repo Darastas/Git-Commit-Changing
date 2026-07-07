@@ -1,4 +1,4 @@
-import type { GitHubFileStatus } from "@/lib/github/github-types";
+import type { GitHubFileStatus, GitHubStarHistory } from "@/lib/github/github-types";
 
 export type MovieFileStatus = "active" | "deleted";
 
@@ -120,6 +120,7 @@ export type RepoMovie = {
     latestSha: string;
     description?: string;
     stars?: number;
+    starHistory?: GitHubStarHistory;
     primaryLanguage?: string;
   };
   generatedAt: string;

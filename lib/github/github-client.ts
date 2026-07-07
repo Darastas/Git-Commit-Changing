@@ -1,7 +1,8 @@
 import type {
   GitHubApiError,
   GitHubCommitDetail,
-  GitHubRepoMetadata
+  GitHubRepoMetadata,
+  GitHubStarHistory
 } from "./github-types";
 
 type GitHubClientOptions = {
@@ -34,8 +35,14 @@ type GitHubCommitListResponse = Array<{
   } | null;
 }>;
 
+type GitHubStargazerListResponse = Array<{
+  starred_at?: string | null;
+}>;
+
 const GITHUB_API_BASE = "https://api.github.com";
 const GITHUB_MAX_PAGE_SIZE = 100;
+const GITHUB_STARGAZER_MEDIA_TYPE = "application/vnd.github.star+json";
+const MAX_STARGAZER_HISTORY_PAGES = 30;
 
 export class GitHubClientError extends Error {
   readonly details: GitHubApiError;
@@ -102,6 +109,26 @@ export function mapGitHubError(response: Response): GitHubApiError {
     retryable: status === 403 || status === 408 || status === 429,
     status
   };
+}
+
+function isValidTimestamp(value: string | null | undefined) {
+  return typeof value === "string" && Number.isFinite(new Date(value).getTime());
+}
+
+function stargazerPageNumbers(totalPages: number) {
+  if (totalPages <= MAX_STARGAZER_HISTORY_PAGES) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const sampled = new Set<number>();
+  const steps = MAX_STARGAZER_HISTORY_PAGES - 1;
+  for (let index = 0; index < MAX_STARGAZER_HISTORY_PAGES; index += 1) {
+    sampled.add(Math.round(1 + ((totalPages - 1) * index) / steps));
+  }
+  sampled.add(1);
+  sampled.add(totalPages);
+
+  return Array.from(sampled).sort((a, b) => a - b);
 }
 
 export class GitHubClient {
@@ -210,12 +237,63 @@ export class GitHubClient {
     }));
   }
 
+  async getStargazerHistory(owner: string, repo: string, totalStars = 0): Promise<GitHubStarHistory> {
+    const normalizedTotalStars = Math.max(0, Math.floor(totalStars));
+    if (normalizedTotalStars === 0) {
+      return {
+        source: "github-stargazers",
+        complete: true,
+        points: []
+      };
+    }
+
+    const totalPages = Math.max(1, Math.ceil(normalizedTotalStars / GITHUB_MAX_PAGE_SIZE));
+    const pages = stargazerPageNumbers(totalPages);
+    const points: GitHubStarHistory["points"] = [];
+
+    for (const page of pages) {
+      const { data } = await this.requestWithHeaders<GitHubStargazerListResponse>(
+        `/repos/${owner}/${repo}/stargazers?per_page=${GITHUB_MAX_PAGE_SIZE}&page=${page}`,
+        GITHUB_STARGAZER_MEDIA_TYPE
+      );
+
+      data.forEach((stargazer, index) => {
+        if (!isValidTimestamp(stargazer.starred_at)) {
+          return;
+        }
+
+        points.push({
+          starredAt: stargazer.starred_at as string,
+          cumulativeStars: Math.min(normalizedTotalStars, (page - 1) * GITHUB_MAX_PAGE_SIZE + index + 1)
+        });
+      });
+    }
+
+    return {
+      source: "github-stargazers",
+      complete: pages.length === totalPages,
+      points: points.sort(
+        (a, b) =>
+          new Date(a.starredAt).getTime() - new Date(b.starredAt).getTime() ||
+          a.cumulativeStars - b.cumulativeStars
+      )
+    };
+  }
+
   private async request<T>(path: string): Promise<T> {
+    const { data } = await this.requestWithHeaders<T>(path, "application/vnd.github+json");
+    return data;
+  }
+
+  private async requestWithHeaders<T>(
+    path: string,
+    accept: string
+  ): Promise<{ data: T; response: Response }> {
     let response: Response;
     try {
       response = await this.fetchImpl(`${GITHUB_API_BASE}${path}`, {
         headers: {
-          Accept: "application/vnd.github+json",
+          Accept: accept,
           "X-GitHub-Api-Version": "2022-11-28",
           ...(this.token ? { Authorization: `Bearer ${this.token}` } : {})
         },
@@ -236,6 +314,9 @@ export class GitHubClient {
       throw new GitHubClientError(mapGitHubError(response));
     }
 
-    return (await response.json()) as T;
+    return {
+      data: (await response.json()) as T,
+      response
+    };
   }
 }

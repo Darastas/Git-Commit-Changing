@@ -1,5 +1,7 @@
 "use client";
 
+import { useLanguage } from "./language";
+
 type TimelineProps = {
   frameIndex: number;
   max: number;
@@ -7,9 +9,11 @@ type TimelineProps = {
 };
 
 export function Timeline({ frameIndex, max, onChange }: TimelineProps) {
+  const { t } = useLanguage();
+
   return (
     <input
-      aria-label="Movie timeline"
+      aria-label={t("movieTimeline")}
       className="movie-timeline h-4 w-full"
       type="range"
       min={0}

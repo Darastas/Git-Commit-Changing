@@ -287,6 +287,80 @@ describe("analyzeJob", () => {
     }
   });
 
+  it("stores fetched GitHub stargazer history in the generated movie when a token is available", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+
+    vi.stubEnv("GITHUB_TOKEN", "test-token");
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      const url = String(input);
+      calls.push(url);
+
+      if (url.endsWith("/repos/octocat/stars-lab")) {
+        return Response.json({
+          owner: { login: "octocat" },
+          name: "stars-lab",
+          full_name: "octocat/stars-lab",
+          html_url: "https://github.com/octocat/stars-lab",
+          default_branch: "main",
+          description: "Stars fixture",
+          stargazers_count: 2,
+          language: "TypeScript",
+          archived: false
+        });
+      }
+
+      if (url.endsWith("/repos/octocat/stars-lab/branches/main")) {
+        return Response.json({ commit: { sha: "stars-latest" } });
+      }
+
+      if (url.includes("/repos/octocat/stars-lab/commits?")) {
+        return Response.json([
+          {
+            sha: "stars-1",
+            commit: {
+              message: "Build with real stars",
+              author: { name: "Ada", date: "2024-03-02T10:00:00Z" }
+            },
+            author: { login: "ada", avatar_url: "https://example.com/ada.png" }
+          }
+        ]);
+      }
+
+      if (url.includes("/repos/octocat/stars-lab/stargazers?")) {
+        return Response.json([
+          { starred_at: "2024-03-01T00:00:00Z", user: { login: "first" } },
+          { starred_at: "2024-03-02T09:00:00Z", user: { login: "second" } }
+        ]);
+      }
+
+      return new Response("unexpected request", { status: 500 });
+    });
+
+    try {
+      const job = await getJobStore().create({
+        repo: "octocat/stars-lab",
+        normalizedRepo: "octocat/stars-lab",
+        commitLimit: ALL_COMMITS_LIMIT
+      });
+
+      const movie = await analyzeJob(job.id);
+
+      expect(movie?.repo.starHistory).toEqual({
+        source: "github-stargazers",
+        complete: true,
+        points: [
+          { starredAt: "2024-03-01T00:00:00Z", cumulativeStars: 1 },
+          { starredAt: "2024-03-02T09:00:00Z", cumulativeStars: 2 }
+        ]
+      });
+      expect(calls.some((url) => url.includes("/repos/octocat/stars-lab/stargazers?"))).toBe(true);
+    } finally {
+      vi.stubGlobal("fetch", originalFetch);
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("reuses a cached movie instead of fetching commit history again", async () => {
     const originalFetch = globalThis.fetch;
     const calls: string[] = [];

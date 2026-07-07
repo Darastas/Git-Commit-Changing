@@ -108,6 +108,13 @@ test("loads a mocked repo movie from the query parameter and exercises playback 
 
   await page.getByLabel("Movie timeline").fill("0");
   await expect(page.getByText("1/4")).toBeVisible();
+
+  await page.getByRole("button", { name: "Switch to Chinese" }).click();
+  await expect(page.getByRole("heading", { name: "提交轨迹" })).toBeVisible();
+  await expect(page.getByLabel("电影时间线")).toBeVisible();
+  await page.getByRole("button", { name: "切换到英文" }).click();
+  await expect(page.getByLabel("Movie timeline")).toBeVisible();
+
   expect(messages.filter((message) => !message.includes("Download the React DevTools"))).toEqual([]);
 });
 
