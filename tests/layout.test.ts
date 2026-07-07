@@ -140,6 +140,18 @@ describe("buildCommitTrend", () => {
     expect(progress).toBe(1);
   });
 
+  it("stops normal playback at the final frame instead of looping", () => {
+    const progress = advanceTrendProgress({
+      currentProgress: 0.99,
+      deltaMs: 1000,
+      speed: 1,
+      playing: true,
+      durationMs: 1000
+    });
+
+    expect(progress).toBe(1);
+  });
+
   it("expands chart scales as the playback reaches larger history totals", () => {
     const movie = buildRepoMovieFromGitHub({
       repo: { ...repo, stars: 5000 },

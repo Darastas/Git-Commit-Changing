@@ -85,7 +85,7 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
           speed: recording ? 1 : speed,
           playing,
           durationMs: activePlaybackDurationMs,
-          loop: !recording
+          loop: false
         });
 
         if (recording && nextProgress >= 1 && !recordingStopQueuedRef.current) {
@@ -97,6 +97,10 @@ export function MoviePlayer({ movie, jobId }: MoviePlayerProps) {
               recorder.stop();
             }
           }, 0);
+        }
+
+        if (!recording && nextProgress >= 1) {
+          window.setTimeout(() => setPlaying(false), 0);
         }
 
         return nextProgress;

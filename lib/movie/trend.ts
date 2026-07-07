@@ -216,7 +216,7 @@ export function advanceTrendProgress({
 
   const next = normalized + delta;
   if (next >= 1) {
-    return loop === false ? 1 : next % 1;
+    return loop === true ? next % 1 : 1;
   }
   return next;
 }
